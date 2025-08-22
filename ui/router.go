@@ -8,21 +8,21 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-type Router struct {
+type UIRouter struct {
 	messagesService *services.MessagesService
 	sessionsService *services.SessionsService
 	authSecret      string
 }
 
-func NewRouter(messagesService *services.MessagesService, sessionsService *services.SessionsService, authSecret string) *Router {
-	return &Router{
+func NewRouter(messagesService *services.MessagesService, sessionsService *services.SessionsService, authSecret string) *UIRouter {
+	return &UIRouter{
 		messagesService: messagesService,
 		sessionsService: sessionsService,
 		authSecret:      authSecret,
 	}
 }
 
-func (ur *Router) NewRouter() *chi.Mux {
+func (ur *UIRouter) NewRouter() *chi.Mux {
 	router := chi.NewRouter()
 
 	router.Route("/ui", func(r chi.Router) {
@@ -47,14 +47,14 @@ func (ur *Router) NewRouter() *chi.Mux {
 }
 
 // UI handlers
-func (ur *Router) loginPage(w http.ResponseWriter, req *http.Request) {
+func (ur *UIRouter) loginPage(w http.ResponseWriter, req *http.Request) {
 	data := TemplateData{
 		Title: "Login",
 	}
-	RenderTemplate(w, "login_standalone.html", data)
+	RenderTemplate(w, "login.html", data)
 }
 
-func (ur *Router) processLogin(w http.ResponseWriter, req *http.Request) {
+func (ur *UIRouter) processLogin(w http.ResponseWriter, req *http.Request) {
 	err := req.ParseForm()
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to parse login form")
@@ -62,7 +62,7 @@ func (ur *Router) processLogin(w http.ResponseWriter, req *http.Request) {
 			Title: "Login",
 			Error: "Invalid form data",
 		}
-		RenderTemplate(w, "login_standalone.html", data)
+		RenderTemplate(w, "login.html", data)
 		return
 	}
 
@@ -73,7 +73,7 @@ func (ur *Router) processLogin(w http.ResponseWriter, req *http.Request) {
 			Title: "Login",
 			Error: "Invalid authentication token",
 		}
-		RenderTemplate(w, "login_standalone.html", data)
+		RenderTemplate(w, "login.html", data)
 		return
 	}
 
@@ -95,37 +95,37 @@ func (ur *Router) processLogin(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func (ur *Router) dashboard(w http.ResponseWriter, req *http.Request) {
+func (ur *UIRouter) dashboard(w http.ResponseWriter, req *http.Request) {
 	// TODO: Render dashboard with queue overview
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-func (ur *Router) queueDetails(w http.ResponseWriter, req *http.Request) {
+func (ur *UIRouter) queueDetails(w http.ResponseWriter, req *http.Request) {
 	// TODO: Render queue details page
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-func (ur *Router) queueMessages(w http.ResponseWriter, req *http.Request) {
+func (ur *UIRouter) queueMessages(w http.ResponseWriter, req *http.Request) {
 	// TODO: Render message browser (HTMX component)
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-func (ur *Router) deleteAllMessages(w http.ResponseWriter, req *http.Request) {
+func (ur *UIRouter) deleteAllMessages(w http.ResponseWriter, req *http.Request) {
 	// TODO: Delete all messages from queue
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-func (ur *Router) requeueAllMessages(w http.ResponseWriter, req *http.Request) {
+func (ur *UIRouter) requeueAllMessages(w http.ResponseWriter, req *http.Request) {
 	// TODO: Requeue all DLQ messages
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-func (ur *Router) deleteMessage(w http.ResponseWriter, req *http.Request) {
+func (ur *UIRouter) deleteMessage(w http.ResponseWriter, req *http.Request) {
 	// TODO: Delete specific message
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-func (ur *Router) requeueMessage(w http.ResponseWriter, req *http.Request) {
+func (ur *UIRouter) requeueMessage(w http.ResponseWriter, req *http.Request) {
 	// TODO: Requeue specific DLQ message
 	w.WriteHeader(http.StatusNotImplemented)
 }
