@@ -3,7 +3,6 @@ package api
 import (
 	"encoding/json"
 	"forq/common"
-	"forq/services"
 	"net/http"
 
 	"github.com/rs/zerolog/log"
@@ -29,27 +28,6 @@ func bearerTokenAuth(authSecret string) func(http.Handler) http.Handler {
 			if authHeader != expectedHeader {
 				log.Error().Msg("Invalid bearer token")
 				sendUnauthorizedErrorResponse(w)
-				return
-			}
-			next.ServeHTTP(w, req)
-		})
-	}
-}
-
-func sessionAuth(sessionsService *services.SessionsService) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			sessionCookie, err := req.Cookie("ForqSession")
-			if err != nil {
-				log.Error().Err(err).Msg("Failed to get ForqSession cookie")
-				http.Redirect(w, req, "/ui/login", http.StatusFound)
-				return
-			}
-
-			sessionId := sessionCookie.Value
-			if !sessionsService.IsSessionValid(sessionId) {
-				log.Error().Msg("Invalid session ID: " + sessionId)
-				http.Redirect(w, req, "/ui/login", http.StatusFound)
 				return
 			}
 			next.ServeHTTP(w, req)

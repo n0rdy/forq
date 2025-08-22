@@ -10,9 +10,11 @@ import (
 	"forq/db"
 	"forq/jobs/cleanup"
 	"forq/services"
+	"forq/ui"
 	"forq/utils"
 	"net/http"
 	"os"
+	"sync"
 
 	_ "github.com/golang-migrate/migrate/v4/database/sqlite3"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
@@ -61,44 +63,90 @@ func main() {
 	defer staleMessagesCleanupJob.Close()
 
 	shutdownCh := make(chan struct{})
+	var shutdownOnce sync.Once
 
-	forqRouter := api.NewForqRouter(messagesService, sessionsService, authSecret)
+	// Create API router (HTTP/2 only)
+	apiRouter := api.NewRouter(messagesService, authSecret)
 
-	// enforcing HTTP2 only
-	var protocols http.Protocols
-	protocols.SetUnencryptedHTTP2(true)
-	protocols.SetHTTP1(false)
+	// API server protocols - HTTP/2 only
+	var apiProtocols http.Protocols
+	apiProtocols.SetUnencryptedHTTP2(true)
+	apiProtocols.SetHTTP1(false)
 
-	forqServer := &http.Server{
+	apiServer := &http.Server{
 		Addr:              "localhost:8080",
-		Handler:           http.TimeoutHandler(forqRouter.NewRouter(), appConfigs.ServerConfig.Timeouts.Handle, "timeout"),
+		Handler:           http.TimeoutHandler(apiRouter.NewRouter(), appConfigs.ServerConfig.Timeouts.Handle, "timeout"),
 		WriteTimeout:      appConfigs.ServerConfig.Timeouts.Write,
 		ReadTimeout:       appConfigs.ServerConfig.Timeouts.Read,
 		ReadHeaderTimeout: appConfigs.ServerConfig.Timeouts.ReadHeader,
 		IdleTimeout:       appConfigs.ServerConfig.Timeouts.Idle,
-		Protocols:         &protocols,
+		Protocols:         &apiProtocols,
 	}
 
+	// Create UI router (HTTP/1.1 + HTTP/2)
+	uiRouter := ui.NewRouter(messagesService, sessionsService, authSecret)
+
+	// UI server protocols - HTTP/1.1 + HTTP/2 for browser compatibility
+	var uiProtocols http.Protocols
+	uiProtocols.SetUnencryptedHTTP2(true)
+	uiProtocols.SetHTTP1(true)
+
+	uiServer := &http.Server{
+		Addr:              "localhost:8081",
+		Handler:           http.TimeoutHandler(uiRouter.NewRouter(), appConfigs.ServerConfig.Timeouts.Handle, "timeout"),
+		WriteTimeout:      appConfigs.ServerConfig.Timeouts.Write,
+		ReadTimeout:       appConfigs.ServerConfig.Timeouts.Read,
+		ReadHeaderTimeout: appConfigs.ServerConfig.Timeouts.ReadHeader,
+		IdleTimeout:       appConfigs.ServerConfig.Timeouts.Idle,
+		Protocols:         &uiProtocols,
+	}
+
+	// Start API server
 	go func() {
-		err := forqServer.ListenAndServe()
+		log.Info().Msg("Starting API server on :8080 (HTTP/2 only)")
+		err := apiServer.ListenAndServe()
 		if err != nil {
-			close(shutdownCh)
+			shutdownOnce.Do(func() { close(shutdownCh) })
 			if errors.Is(err, http.ErrServerClosed) {
-				log.Info().Msg("server shutdown")
+				log.Info().Msg("API server shutdown")
 			} else {
-				log.Warn().Err(err).Msg("server failed")
+				log.Warn().Err(err).Msg("API server failed")
+			}
+		}
+	}()
+
+	// Start UI server
+	go func() {
+		log.Info().Msg("Starting UI server on :8081 (HTTP/1.1 + HTTP/2)")
+		err := uiServer.ListenAndServe()
+		if err != nil {
+			shutdownOnce.Do(func() { close(shutdownCh) })
+			if errors.Is(err, http.ErrServerClosed) {
+				log.Info().Msg("UI server shutdown")
+			} else {
+				log.Warn().Err(err).Msg("UI server failed")
 			}
 		}
 	}()
 
 	for range shutdownCh {
 		log.Info().Msg("server shutdown requested")
-		err := forqServer.Shutdown(context.Background())
+
+		// Shutdown API server
+		err := apiServer.Shutdown(context.Background())
 		if err != nil {
-			err := forqServer.Close()
+			err := apiServer.Close()
 			if err != nil {
-				log.Warn().Err(err).Msg("failed to close server")
-				return
+				log.Warn().Err(err).Msg("failed to close API server")
+			}
+		}
+
+		// Shutdown UI server
+		err = uiServer.Shutdown(context.Background())
+		if err != nil {
+			err := uiServer.Close()
+			if err != nil {
+				log.Warn().Err(err).Msg("failed to close UI server")
 			}
 		}
 	}
