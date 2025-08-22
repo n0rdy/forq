@@ -5,6 +5,7 @@ import (
 	"errors"
 	"forq/common"
 	"forq/services"
+	"forq/ui"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -47,8 +48,21 @@ func (fr *ForqRouter) NewRouter() *chi.Mux {
 	})
 
 	router.Route("/ui", func(r chi.Router) {
-		r.Use(sessionAuth(fr.sessionsService))
+		// Unprotected login routes
+		r.Get("/login", fr.loginPage)
+		r.Post("/login", fr.processLogin)
 
+		// Protected routes - apply middleware to specific routes
+		r.With(sessionAuth(fr.sessionsService)).Get("/", fr.dashboard)
+		r.Route("/queue/{queue}", func(r chi.Router) {
+			r.Use(sessionAuth(fr.sessionsService))
+			r.Get("/", fr.queueDetails)
+			r.Get("/messages", fr.queueMessages)
+			r.Delete("/messages", fr.deleteAllMessages)
+			r.Post("/messages/requeue", fr.requeueAllMessages)
+			r.Delete("/messages/{messageId}", fr.deleteMessage)
+			r.Post("/messages/requeue/{messageId}", fr.requeueMessage)
+		})
 	})
 
 	return router
@@ -144,4 +158,88 @@ func (fr *ForqRouter) sendResponseFromError(w http.ResponseWriter, err error) {
 	} else {
 		fr.sendErrorResponse(w, http.StatusInternalServerError, common.ErrCodeInternal)
 	}
+}
+
+// UI handlers
+func (fr *ForqRouter) loginPage(w http.ResponseWriter, req *http.Request) {
+	data := ui.TemplateData{
+		Title: "Login",
+	}
+	ui.RenderTemplate(w, "login_standalone.html", data)
+}
+
+func (fr *ForqRouter) processLogin(w http.ResponseWriter, req *http.Request) {
+	err := req.ParseForm()
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to parse login form")
+		data := ui.TemplateData{
+			Title: "Login",
+			Error: "Invalid form data",
+		}
+		ui.RenderTemplate(w, "login_standalone.html", data)
+		return
+	}
+
+	token := req.FormValue("token")
+	if token != fr.authSecret {
+		log.Error().Msg("Invalid login token")
+		data := ui.TemplateData{
+			Title: "Login",
+			Error: "Invalid authentication token",
+		}
+		ui.RenderTemplate(w, "login_standalone.html", data)
+		return
+	}
+
+	// Create session
+	sessionId, _ := fr.sessionsService.CreateSession()
+
+	// Set session cookie
+	http.SetCookie(w, &http.Cookie{
+		Name:     "ForqSession",
+		Value:    sessionId,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   req.TLS != nil, // Only secure if HTTPS
+		SameSite: http.SameSiteLaxMode,
+	})
+
+	// Redirect to dashboard
+	w.Header().Set("HX-Redirect", "/ui")
+	w.WriteHeader(http.StatusOK)
+}
+
+func (fr *ForqRouter) dashboard(w http.ResponseWriter, req *http.Request) {
+	// TODO: Render dashboard with queue overview
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+func (fr *ForqRouter) queueDetails(w http.ResponseWriter, req *http.Request) {
+	// TODO: Render queue details page
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+func (fr *ForqRouter) queueMessages(w http.ResponseWriter, req *http.Request) {
+	// TODO: Render message browser (HTMX component)
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+func (fr *ForqRouter) deleteAllMessages(w http.ResponseWriter, req *http.Request) {
+	// TODO: Delete all messages from queue
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+func (fr *ForqRouter) requeueAllMessages(w http.ResponseWriter, req *http.Request) {
+	// TODO: Requeue all DLQ messages
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+func (fr *ForqRouter) deleteMessage(w http.ResponseWriter, req *http.Request) {
+	// TODO: Delete specific message
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+func (fr *ForqRouter) requeueMessage(w http.ResponseWriter, req *http.Request) {
+	// TODO: Requeue specific DLQ message
+	w.WriteHeader(http.StatusNotImplemented)
 }

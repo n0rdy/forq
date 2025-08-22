@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Title}} - Forq Queue Manager</title>
+    
+    <!-- DaisyUI v5 + Tailwind CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@5.0.0/dist/full.min.css" rel="stylesheet" type="text/css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@2.0.0"></script>
+</head>
+<body class="min-h-screen bg-base-200">
+    <div class="hero min-h-screen">
+        <div class="hero-content flex-col lg:flex-row-reverse">
+            <div class="text-center lg:text-left">
+                <h1 class="text-5xl font-bold">Forq Queue Manager</h1>
+                <p class="py-6">
+                    Enter your authentication token to access the queue management dashboard.
+                </p>
+            </div>
+            <div class="card bg-base-100 w-full max-w-sm shrink-0 shadow-2xl">
+                <form class="card-body" hx-post="/ui/login" hx-target="body">
+                    <div class="form-control">
+                        <label class="label">
+                            <span class="label-text">Auth Token</span>
+                        </label>
+                        <input 
+                            type="password" 
+                            name="token" 
+                            placeholder="Enter your token" 
+                            class="input input-bordered" 
+                            required 
+                            autofocus
+                        />
+                    </div>
+                    
+                    {{if .Error}}
+                    <div class="alert alert-error mt-4">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 shrink-0 stroke-current" fill="none" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>{{.Error}}</span>
+                    </div>
+                    {{end}}
+                    
+                    <div class="form-control mt-6">
+                        <button class="btn btn-primary" type="submit">
+                            <span class="htmx-indicator loading loading-spinner loading-sm"></span>
+                            Login
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

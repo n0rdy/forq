@@ -38,6 +38,7 @@ func NewStaleMessagesCleanupJob(repo *db.ForqRepo, intervalMs int64) *StaleMessa
 		repo:       repo,
 		intervalMs: intervalMs,
 		ticker:     ticker,
+		done:       done,
 	}
 }
 

@@ -16,8 +16,7 @@ const (
 func GetOrCreateDefaultDBPath() (string, error) {
 	possiblePaths := getAllPossibleDBPaths()
 
-	// First, check if any existing DB files exist, as the OS settings (e.g., env vars) might have changed,
-	// so we need to make sure we won't miss the existing DB file
+	// First, check if any existing DB files exist
 	var existingPaths []string
 	for _, path := range possiblePaths {
 		if _, err := os.Stat(path); err == nil {
@@ -25,26 +24,32 @@ func GetOrCreateDefaultDBPath() (string, error) {
 		}
 	}
 
-	// If multiple DB files exist, panic - user needs to resolve manually
 	if len(existingPaths) > 1 {
 		return "", fmt.Errorf("multiple database files found at: %v. Please remove duplicates manually", existingPaths)
 	}
 
-	// If exactly one exists, use it
 	if len(existingPaths) == 1 {
 		return existingPaths[0], nil
 	}
 
-	// No existing DB found, create new one at preferred location
 	preferredPath := getPreferredDBPath()
 
-	// Ensure directory exists
+	if preferredPath == "" {
+		return "", fmt.Errorf("unable to determine valid database path")
+	}
+
 	dir := filepath.Dir(preferredPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return "", fmt.Errorf("failed to create directory %s: %w", dir, err)
 	}
 
-	return preferredPath, nil
+	// Convert to absolute path to handle spaces and special characters
+	absPath, err := filepath.Abs(preferredPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to get absolute path: %w", err)
+	}
+
+	return absPath, nil
 }
 
 func getAllPossibleDBPaths() []string {
@@ -80,7 +85,6 @@ func getAllPossibleDBPaths() []string {
 }
 
 func getPreferredDBPath() string {
-	// This is your current GetDefaultDBPath logic
 	switch runtime.GOOS {
 	case common.WindowsOS:
 		if appData := os.Getenv("APPDATA"); appData != "" {
@@ -105,7 +109,8 @@ func getPreferredDBPath() string {
 		}
 	}
 
-	return toDbFilePath("")
+	// Return empty string instead of calling toDbFilePath("")
+	return ""
 }
 
 func toDbFilePath(dataDir string) string {

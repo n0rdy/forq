@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"forq/api"
 	"forq/configs"
@@ -12,7 +13,9 @@ import (
 	"forq/utils"
 	"net/http"
 	"os"
-	"strings"
+
+	_ "github.com/golang-migrate/migrate/v4/database/sqlite3"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/rs/zerolog/log"
@@ -103,18 +106,23 @@ func main() {
 
 func getAuthSecret() string {
 	authSecret := os.Getenv("FORQ_AUTH_SECRET")
-	if authSecret == "" {
-		for _, arg := range os.Args {
-			if strings.HasPrefix(arg, "--auth-secret=") {
-				return strings.TrimPrefix(arg, "--auth-secret=")
-			}
-		}
+	if authSecret != "" {
+		return authSecret
 	}
-	return authSecret
+
+	var flagAuthSecret string
+	flag.StringVar(&flagAuthSecret, "auth-secret", "", "Authentication secret")
+	flag.Parse()
+
+	return flagAuthSecret
 }
 
 func runMigrations(dbPath string) {
-	m, err := migrate.New("file://db/migrations", dbPath)
+	// x-no-tx-wrap=true to disable transaction wrapping for PRAGMA statements, as otherwise it fails:
+	// https://github.com/golang-migrate/migrate/issues/346
+	dbURL := fmt.Sprintf("sqlite3://file:%s?cache=shared&mode=rwc&x-no-tx-wrap=true", dbPath)
+
+	m, err := migrate.New("file://db/migrations", dbURL)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to create migration instance")
 		panic(err)

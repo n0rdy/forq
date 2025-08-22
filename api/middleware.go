@@ -42,14 +42,14 @@ func sessionAuth(sessionsService *services.SessionsService) func(http.Handler) h
 			sessionCookie, err := req.Cookie("ForqSession")
 			if err != nil {
 				log.Error().Err(err).Msg("Failed to get ForqSession cookie")
-				//renderLoginForm(w)
+				http.Redirect(w, req, "/ui/login", http.StatusFound)
 				return
 			}
 
 			sessionId := sessionCookie.Value
 			if !sessionsService.IsSessionValid(sessionId) {
 				log.Error().Msg("Invalid session ID: " + sessionId)
-				//renderLoginForm(w)
+				http.Redirect(w, req, "/ui/login", http.StatusFound)
 				return
 			}
 			next.ServeHTTP(w, req)
