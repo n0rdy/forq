@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"forq/common"
 	"forq/configs"
+	"runtime"
 	"strings"
 	"time"
 
@@ -15,23 +16,45 @@ import (
 )
 
 type ForqRepo struct {
-	db         *sql.DB
+	dbRead     *sql.DB
+	dbWrite    *sql.DB
 	appConfigs *configs.AppConfigs
 }
 
 func NewSQLiteRepo(dbPath string, appConfigs *configs.AppConfigs) (*ForqRepo, error) {
-	db, err := sql.Open("sqlite", dbPath)
+	// Create read connection with multiple connections for concurrent reads
+	dbRead, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, err
 	}
+	dbRead.SetMaxOpenConns(runtime.NumCPU()*2 + 1)
+	dbRead.SetMaxIdleConns(runtime.NumCPU()*2 + 1)
+	dbRead.SetConnMaxLifetime(0)
 
-	if err := db.Ping(); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("ping database: %w", err)
+	if err := dbRead.Ping(); err != nil {
+		dbRead.Close()
+		return nil, fmt.Errorf("ping read database: %w", err)
+	}
+
+	// Create write connection with single connection to serialize writes
+	dbWrite, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		dbRead.Close()
+		return nil, err
+	}
+	dbWrite.SetMaxOpenConns(1)
+	dbWrite.SetMaxIdleConns(1)
+	dbWrite.SetConnMaxLifetime(0)
+
+	if err := dbWrite.Ping(); err != nil {
+		dbRead.Close()
+		dbWrite.Close()
+		return nil, fmt.Errorf("ping write database: %w", err)
 	}
 
 	return &ForqRepo{
-		db:         db,
+		dbRead:     dbRead,
+		dbWrite:    dbWrite,
 		appConfigs: appConfigs,
 	}, nil
 }
@@ -42,7 +65,7 @@ func (fr *ForqRepo) InsertMessage(newMessage *NewMessage, ctx context.Context) e
 		VALUES (?, ?, ?, ?, ?, ?, ?);
 	`
 
-	_, err := fr.db.ExecContext(ctx, query,
+	_, err := fr.dbWrite.ExecContext(ctx, query,
 		newMessage.Id,           // id
 		newMessage.QueueName,    // queue
 		newMessage.Content,      // content
@@ -81,7 +104,7 @@ func (fr *ForqRepo) SelectMessageForConsuming(queueName string, ctx context.Cont
         RETURNING id, content;`
 
 	var msg MessageForConsuming
-	err := fr.db.QueryRowContext(ctx, query,
+	err := fr.dbWrite.QueryRowContext(ctx, query,
 		common.ProcessingStatus, // SET status = ?
 		nowMs,                   // processing_started_at = ?
 		nowMs,                   // updated_at = ?
@@ -119,7 +142,7 @@ func (fr *ForqRepo) UpdateMessageOnConsumingFailure(messageId string, queueName 
             updated_at = ?
         WHERE id = ? AND queue = ?;`, fr.processAfterCases(nowMs))
 
-	result, err := fr.db.ExecContext(ctx, query,
+	result, err := fr.dbWrite.ExecContext(ctx, query,
 		fr.appConfigs.MaxDeliveryAttempts, // WHEN attempts + 1 >= ? (status check)
 		common.FailedStatus,               // THEN ?  		-- failed if no more attempts left
 		common.ReadyStatus,                // ELSE ?			-- ready if there are attempts left
@@ -162,7 +185,7 @@ func (fr *ForqRepo) UpdateStaleMessages(ctx context.Context) error {
             updated_at = ?
         WHERE status = ? AND processing_started_at < ?;`, fr.processAfterCases(nowMs))
 
-	_, err := fr.db.ExecContext(ctx, query,
+	_, err := fr.dbWrite.ExecContext(ctx, query,
 		fr.appConfigs.MaxDeliveryAttempts,       // WHEN attempts + 1 >= ? (status check)
 		common.FailedStatus,                     // THEN ?  			-- failed if no more attempts left
 		common.ReadyStatus,                      // ELSE ?			-- ready if there are attempts left
@@ -190,7 +213,7 @@ func (fr *ForqRepo) UpdateFailedMessagesForRegularQueues(ctx context.Context) er
             expires_after = ?
         WHERE status = ? AND is_dlq = FALSE;`
 
-	_, err := fr.db.ExecContext(ctx, query,
+	_, err := fr.dbWrite.ExecContext(ctx, query,
 		common.ReadyStatus,                     // status = ?
 		nowMs,                                  // process_after = ?
 		common.MaxAttemptsReachedFailureReason, // failure_reason = ?
@@ -218,7 +241,7 @@ func (fr *ForqRepo) UpdateExpiredMessagesForRegularQueues(ctx context.Context) e
             expires_after = ?
         WHERE status != ? AND expires_after < ? AND is_dlq = FALSE;`
 
-	_, err := fr.db.ExecContext(ctx, query,
+	_, err := fr.dbWrite.ExecContext(ctx, query,
 		common.ReadyStatus,                 // status = ?
 		nowMs,                              // process_after = ?
 		common.MessageExpiredFailureReason, // failure_reason = ?
@@ -235,7 +258,7 @@ func (fr *ForqRepo) DeleteMessage(messageId string, queueName string, ctx contex
 		DELETE FROM messages
 		WHERE id = ? AND queue = ?;`
 
-	result, err := fr.db.ExecContext(ctx, query,
+	result, err := fr.dbWrite.ExecContext(ctx, query,
 		messageId, // WHERE id = ?
 		queueName, // AND queue = ?
 	)
@@ -261,7 +284,7 @@ func (fr *ForqRepo) DeleteFailedMessagesFromDlq(ctx context.Context) error {
         DELETE FROM messages
         WHERE status = ? AND is_dlq = TRUE;`
 
-	_, err := fr.db.ExecContext(ctx, query,
+	_, err := fr.dbWrite.ExecContext(ctx, query,
 		common.FailedStatus, // WHERE status = ?
 	)
 	return err
@@ -274,7 +297,7 @@ func (fr *ForqRepo) DeleteExpiredMessagesFromDlq(ctx context.Context) error {
         DELETE FROM messages
         WHERE status != ? AND expires_after < ? AND is_dlq = TRUE;`
 
-	_, err := fr.db.ExecContext(ctx, query,
+	_, err := fr.dbWrite.ExecContext(ctx, query,
 		common.ProcessingStatus, // WHERE status != ?
 		nowMs,                   // expires_after < ?
 	)
@@ -282,7 +305,18 @@ func (fr *ForqRepo) DeleteExpiredMessagesFromDlq(ctx context.Context) error {
 }
 
 func (fr *ForqRepo) Close() error {
-	return fr.db.Close()
+	var err1, err2 error
+	if fr.dbRead != nil {
+		err1 = fr.dbRead.Close()
+	}
+	if fr.dbWrite != nil {
+		err2 = fr.dbWrite.Close()
+	}
+
+	if err1 != nil {
+		return err1
+	}
+	return err2
 }
 
 func (fr *ForqRepo) processAfterCases(nowMs int64) string {

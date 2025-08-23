@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Title}} - Forq Admin UI</title>
+    
+    <!-- DaisyUI v5 + Tailwind CSS (Official CDN) -->
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    
+    <!-- HTMX -->
+    <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.6/dist/htmx.min.js"></script>
+    
+    <!-- Custom styles if needed -->
+    <style>
+        /* Custom overrides can go here */
+    </style>
+</head>
+<body class="min-h-screen bg-base-200">
+    {{template "queue-content" .}}
+</body>
+</html>
