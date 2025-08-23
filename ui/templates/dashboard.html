@@ -1,0 +1,182 @@
+{{define "content"}}
+<div class="container mx-auto p-4">
+    <!-- Header -->
+    <div class="navbar bg-base-100 rounded-box shadow-sm mb-6">
+        <div class="navbar-start">
+            <h1 class="text-xl font-bold">Forq Admin Dashboard</h1>
+        </div>
+        <div class="navbar-end">
+            <form method="post" action="/ui/logout">
+                <button class="btn btn-ghost btn-sm">Logout</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Stats Overview -->
+    <div class="stats stats-vertical lg:stats-horizontal shadow mb-6 w-full">
+        <div class="stat text-center">
+            <div class="stat-title">Total Queues</div>
+            <div class="stat-value">6</div>
+            <div class="stat-desc">3 regular + 3 DLQ</div>
+        </div>
+
+        <div class="stat text-center">
+            <div class="stat-title">Total Messages</div>
+            <div class="stat-value">1,247</div>
+            <div class="stat-desc">Across all queues</div>
+        </div>
+
+        <div class="stat text-center">
+            <div class="stat-figure text-error mx-auto">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="inline-block w-8 h-8 stroke-current">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.664-.833-2.464 0L4.35 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                </svg>
+            </div>
+            <div class="stat-title">DLQ Messages</div>
+            <div class="stat-value text-error">5</div>
+            <div class="stat-desc">Need attention</div>
+        </div>
+    </div>
+
+    <!-- Queue List -->
+    <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+            <h2 class="card-title mb-4">Message Queues</h2>
+            
+            <div class="overflow-x-auto">
+                <table class="table table-zebra">
+                    <thead>
+                        <tr>
+                            <th>Queue Name</th>
+                            <th class="text-center">Type</th>
+                            <th class="text-center">Messages</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>
+                                <div class="flex items-center gap-3">
+                                    <div class="avatar placeholder">
+                                        <div class="bg-neutral text-neutral-content rounded-full w-8">
+                                            <span class="text-xs">E</span>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <a href="/ui/queue/emails" class="font-bold link link-primary">emails</a>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="text-center">
+                                <span class="badge badge-primary">Regular</span>
+                            </td>
+                            <td class="text-center">
+                                <span class="badge badge-outline">842</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>
+                                <div class="flex items-center gap-3">
+                                    <div class="avatar placeholder">
+                                        <div class="bg-neutral text-neutral-content rounded-full w-8">
+                                            <span class="text-xs">E</span>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <a href="/ui/queue/emails-dlq" class="font-bold link link-primary">emails-dlq</a>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="text-center">
+                                <span class="badge badge-error">DLQ</span>
+                            </td>
+                            <td class="text-center">
+                                <span class="badge badge-outline">2</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>
+                                <div class="flex items-center gap-3">
+                                    <div class="avatar placeholder">
+                                        <div class="bg-neutral text-neutral-content rounded-full w-8">
+                                            <span class="text-xs">N</span>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <a href="/ui/queue/notifications" class="font-bold link link-primary">notifications</a>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="text-center">
+                                <span class="badge badge-primary">Regular</span>
+                            </td>
+                            <td class="text-center">
+                                <span class="badge badge-outline">325</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>
+                                <div class="flex items-center gap-3">
+                                    <div class="avatar placeholder">
+                                        <div class="bg-neutral text-neutral-content rounded-full w-8">
+                                            <span class="text-xs">N</span>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <a href="/ui/queue/notifications-dlq" class="font-bold link link-primary">notifications-dlq</a>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="text-center">
+                                <span class="badge badge-error">DLQ</span>
+                            </td>
+                            <td class="text-center">
+                                <span class="badge badge-outline">1</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>
+                                <div class="flex items-center gap-3">
+                                    <div class="avatar placeholder">
+                                        <div class="bg-neutral text-neutral-content rounded-full w-8">
+                                            <span class="text-xs">R</span>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <a href="/ui/queue/reports" class="font-bold link link-primary">reports</a>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="text-center">
+                                <span class="badge badge-primary">Regular</span>
+                            </td>
+                            <td class="text-center">
+                                <span class="badge badge-outline">80</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>
+                                <div class="flex items-center gap-3">
+                                    <div class="avatar placeholder">
+                                        <div class="bg-neutral text-neutral-content rounded-full w-8">
+                                            <span class="text-xs">R</span>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <a href="/ui/queue/reports-dlq" class="font-bold link link-primary">reports-dlq</a>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="text-center">
+                                <span class="badge badge-error">DLQ</span>
+                            </td>
+                            <td class="text-center">
+                                <span class="badge badge-outline">2</span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{{end}}

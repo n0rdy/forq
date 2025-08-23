@@ -29,6 +29,7 @@ func (ur *UIRouter) NewRouter() *chi.Mux {
 		// Unprotected login routes
 		r.Get("/login", ur.loginPage)
 		r.Post("/login", ur.processLogin)
+		r.Post("/logout", ur.processLogout)
 
 		// Protected routes - apply middleware to specific routes
 		r.With(sessionAuth(ur.sessionsService)).Get("/", ur.dashboard)
@@ -95,9 +96,25 @@ func (ur *UIRouter) processLogin(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func (ur *UIRouter) processLogout(w http.ResponseWriter, req *http.Request) {
+	// Clear the session cookie
+	http.SetCookie(w, &http.Cookie{
+		Name:     "ForqSession",
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1, // Delete the cookie
+		HttpOnly: true,
+	})
+
+	// Redirect to login page
+	http.Redirect(w, req, "/ui/login", http.StatusFound)
+}
+
 func (ur *UIRouter) dashboard(w http.ResponseWriter, req *http.Request) {
-	// TODO: Render dashboard with queue overview
-	w.WriteHeader(http.StatusNotImplemented)
+	data := TemplateData{
+		Title: "Dashboard",
+	}
+	RenderTemplate(w, "base.html", data)
 }
 
 func (ur *UIRouter) queueDetails(w http.ResponseWriter, req *http.Request) {
