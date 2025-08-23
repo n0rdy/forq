@@ -64,6 +64,12 @@ func (ss *SessionsService) IsSessionValid(sessionId string) bool {
 	return false
 }
 
+func (ss *SessionsService) InvalidateSession(sessionId string) {
+	ss.mu.Lock()
+	delete(ss.activeSessions, sessionId)
+	ss.mu.Unlock()
+}
+
 func (ss *SessionsService) Close() error {
 	ss.ticker.Stop()
 	return nil
