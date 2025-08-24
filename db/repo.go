@@ -124,6 +124,157 @@ func (fr *ForqRepo) SelectMessageForConsuming(queueName string, ctx context.Cont
 	return &msg, nil
 }
 
+func (fr *ForqRepo) SelectMessageMetadata(messageId string, queueName string, ctx context.Context) (*MessageMetadata, error) {
+	query := `
+		SELECT id, status, attempts, received_at, process_after
+		FROM messages
+		WHERE id = ? AND queue = ?;`
+
+	var msgMeta MessageMetadata
+	err := fr.dbRead.QueryRowContext(ctx, query,
+		messageId, // WHERE id = ?
+		queueName, // AND queue = ?
+	).Scan(&msgMeta.Id, &msgMeta.Status, &msgMeta.Attempts,
+		&msgMeta.ReceivedAt, &msgMeta.ProcessAfter)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		log.Error().Err(err).Str("queue", queueName).Str("message_id", messageId).Msg("failed to select message metadata")
+		return nil, common.ErrInternal
+	}
+	return &msgMeta, nil
+}
+
+func (fr *ForqRepo) SelectMessageDetails(messageId string, queueName string, ctx context.Context) (*MessageDetails, error) {
+	query := `
+		SELECT id, content, status, attempts, process_after, processing_started_at, failure_reason,
+		       received_at, updated_at, expires_after
+		FROM messages
+		WHERE id = ? AND queue = ?;`
+
+	var msgDetails MessageDetails
+	err := fr.dbRead.QueryRowContext(ctx, query,
+		messageId, // WHERE id = ?
+		queueName, // AND queue = ?
+	).Scan(&msgDetails.Id, &msgDetails.Content, &msgDetails.Status, &msgDetails.Attempts, &msgDetails.ProcessAfter,
+		&msgDetails.ProcessingStartedAt, &msgDetails.FailureReason, &msgDetails.ReceivedAt, &msgDetails.UpdatedAt,
+		&msgDetails.ExpiresAfter)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		log.Error().Err(err).Str("queue", queueName).Str("message_id", messageId).Msg("failed to select message details")
+		return nil, common.ErrInternal
+	}
+	return &msgDetails, nil
+}
+
+func (fr *ForqRepo) SelectAllQueuesWithStats(ctx context.Context) ([]QueueMetadata, error) {
+	query := `
+		SELECT queue, COUNT(*) as messages_count, is_dlq
+		FROM messages
+		GROUP BY queue, is_dlq
+		ORDER BY queue ASC;`
+
+	rows, err := fr.dbRead.QueryContext(ctx, query)
+	if err != nil {
+		log.Error().Err(err).Msg("failed to select all queues with stats")
+		return nil, common.ErrInternal
+	}
+	defer rows.Close()
+
+	var queues []QueueMetadata
+	for rows.Next() {
+		var q QueueMetadata
+		if err := rows.Scan(&q.Name, &q.MessagesCount, &q.IsDLQ); err != nil {
+			log.Error().Err(err).Msg("failed to scan queue metadata")
+			return nil, common.ErrInternal
+		}
+		queues = append(queues, q)
+	}
+
+	if err := rows.Err(); err != nil {
+		log.Error().Err(err).Msg("error iterating over queue metadata rows")
+		return nil, common.ErrInternal
+	}
+	return queues, nil
+}
+
+func (fr *ForqRepo) SelectQueueStats(queueName string, ctx context.Context) (*QueueMetadata, error) {
+	query := `
+		SELECT queue, COUNT(*) as messages_count, is_dlq
+		FROM messages
+		WHERE queue = ?
+		GROUP BY queue, is_dlq;`
+
+	var queueStats QueueMetadata
+	err := fr.dbRead.QueryRowContext(ctx, query, queueName).Scan(
+		&queueStats.Name,
+		&queueStats.MessagesCount,
+		&queueStats.IsDLQ,
+	)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		log.Error().Err(err).Str("queue", queueName).Msg("failed to select queue stats")
+		return nil, common.ErrInternal
+	}
+	return &queueStats, nil
+}
+
+func (fr *ForqRepo) SelectMessagesForUI(queueName string, cursor string, limit int, ctx context.Context) ([]MessageMetadata, error) {
+	var query string
+	var args []interface{}
+
+	if cursor == "" {
+		// First page - no cursor
+		query = `
+			SELECT id, status, attempts, received_at, process_after
+			FROM messages
+			WHERE queue = ?
+			ORDER BY received_at DESC, id DESC
+			LIMIT ?;`
+		args = []interface{}{queueName, limit}
+	} else {
+		// Subsequent pages - use cursor
+		query = `
+			SELECT id, status, attempts, received_at, process_after
+			FROM messages
+			WHERE queue = ? AND id < ?
+			ORDER BY received_at DESC, id DESC
+			LIMIT ?;`
+		args = []interface{}{queueName, cursor, limit}
+	}
+
+	rows, err := fr.dbRead.QueryContext(ctx, query, args...)
+	if err != nil {
+		log.Error().Err(err).Str("queue", queueName).Str("cursor", cursor).Msg("failed to select messages for UI")
+		return nil, common.ErrInternal
+	}
+	defer rows.Close()
+
+	var messages []MessageMetadata
+	for rows.Next() {
+		var msg MessageMetadata
+		if err := rows.Scan(&msg.Id, &msg.Status, &msg.Attempts, &msg.ReceivedAt, &msg.ProcessAfter); err != nil {
+			log.Error().Err(err).Msg("failed to scan message metadata for UI")
+			return nil, common.ErrInternal
+		}
+		messages = append(messages, msg)
+	}
+
+	if err := rows.Err(); err != nil {
+		log.Error().Err(err).Msg("error iterating over message metadata rows for UI")
+		return nil, common.ErrInternal
+	}
+	return messages, nil
+}
+
 func (fr *ForqRepo) UpdateMessageOnConsumingFailure(messageId string, queueName string, ctx context.Context) error {
 	nowMs := time.Now().UnixMilli()
 
@@ -253,6 +404,80 @@ func (fr *ForqRepo) UpdateExpiredMessagesForRegularQueues(ctx context.Context) e
 	return err
 }
 
+func (fr *ForqRepo) RequeueDlqMessages(queueName string, ctx context.Context) error {
+	nowMs := time.Now().UnixMilli()
+	destinationQueueName := strings.TrimSuffix(queueName, "-dlq")
+
+	query := `
+		UPDATE messages
+		SET
+			queue = ?, 			-- Move back to regular queue
+			is_dlq = FALSE,     -- Unset DLQ flag
+			status = ?,
+			attempts = 0,
+			process_after = ?,
+			processing_started_at = NULL,
+			failure_reason = NULL,
+			updated_at = ?,
+			expires_after = ?
+		WHERE queue = ? AND status != ?;`
+
+	_, err := fr.dbWrite.ExecContext(ctx, query,
+		destinationQueueName,           // queue = ? -- Move back to regular queue
+		common.ReadyStatus,             // status = ?
+		nowMs,                          // process_after = ?
+		nowMs,                          // updated_at = ?
+		nowMs+fr.appConfigs.QueueTtlMs, // expires_after = ?
+		queueName,                      // WHERE queue = ?
+		common.ProcessingStatus,        // AND status != ?
+	)
+	return err
+}
+
+func (fr *ForqRepo) RequeueDlqMessage(messageId string, queueName string, ctx context.Context) error {
+	nowMs := time.Now().UnixMilli()
+	destinationQueueName := strings.TrimSuffix(queueName, "-dlq")
+
+	query := `
+		UPDATE messages
+		SET
+			queue = ?, 			-- Move back to regular queue
+			is_dlq = FALSE,     -- Unset DLQ flag
+			status = ?,
+			attempts = 0,
+			process_after = ?,
+			processing_started_at = NULL,
+			failure_reason = NULL,
+			updated_at = ?,
+			expires_after = ?
+		WHERE id = ? AND queue = ? AND status != ?;`
+
+	result, err := fr.dbWrite.ExecContext(ctx, query,
+		destinationQueueName,           // queue = ? -- Move back to regular queue
+		common.ReadyStatus,             // status = ?
+		nowMs,                          // process_after = ?
+		nowMs,                          // updated_at = ?
+		nowMs+fr.appConfigs.QueueTtlMs, // expires_after = ?
+		messageId,                      // WHERE id = ?
+		queueName,                      // AND queue = ?
+		common.ProcessingStatus,        // AND status != ?
+	)
+	if err != nil {
+		log.Error().Err(err).Str("queue", queueName).Str("message_id", messageId).Msg("failed to update message by moving from DLQ to regular")
+		return common.ErrInternal
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return common.ErrInternal
+	}
+
+	if rowsAffected == 0 {
+		return common.ErrNotFoundMessage
+	}
+	return nil
+}
+
 func (fr *ForqRepo) DeleteMessage(messageId string, queueName string, ctx context.Context) error {
 	query := `
 		DELETE FROM messages
@@ -300,6 +525,17 @@ func (fr *ForqRepo) DeleteExpiredMessagesFromDlq(ctx context.Context) error {
 	_, err := fr.dbWrite.ExecContext(ctx, query,
 		common.ProcessingStatus, // WHERE status != ?
 		nowMs,                   // expires_after < ?
+	)
+	return err
+}
+
+func (fr *ForqRepo) DeleteAllMessagesFromQueue(queueName string, ctx context.Context) error {
+	query := `
+		DELETE FROM messages
+		WHERE queue = ?;`
+
+	_, err := fr.dbWrite.ExecContext(ctx, query,
+		queueName, // WHERE queue = ?
 	)
 	return err
 }

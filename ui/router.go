@@ -1,12 +1,9 @@
 package ui
 
 import (
-	"fmt"
+	"forq/common"
 	"forq/services"
-	"math"
 	"net/http"
-	"strconv"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/rs/zerolog/log"
@@ -15,13 +12,15 @@ import (
 type Router struct {
 	messagesService *services.MessagesService
 	sessionsService *services.SessionsService
+	queuesService   *services.QueuesService
 	authSecret      string
 }
 
-func NewRouter(messagesService *services.MessagesService, sessionsService *services.SessionsService, authSecret string) *Router {
+func NewRouter(messagesService *services.MessagesService, sessionsService *services.SessionsService, queuesService *services.QueuesService, authSecret string) *Router {
 	return &Router{
 		messagesService: messagesService,
 		sessionsService: sessionsService,
+		queuesService:   queuesService,
 		authSecret:      authSecret,
 	}
 }
@@ -36,11 +35,15 @@ func (ur *Router) NewRouter() *chi.Mux {
 		r.Post("/logout", ur.processLogout)
 
 		// Protected routes - apply middleware to specific routes
-		r.With(sessionAuth(ur.sessionsService)).Get("/", ur.dashboard)
+		r.With(sessionAuth(ur.sessionsService)).
+			Get("/", ur.dashboardPage)
+
 		r.Route("/queue/{queue}", func(r chi.Router) {
 			r.Use(sessionAuth(ur.sessionsService))
-			r.Get("/", ur.queueDetails)
+
+			r.Get("/", ur.queueDetailsPage)
 			r.Get("/messages", ur.queueMessages)
+			r.Get("/messages/{messageId}/details", ur.messageDetails)
 			r.Delete("/messages", ur.deleteAllMessages)
 			r.Post("/messages/requeue", ur.requeueAllMessages)
 			r.Delete("/messages/{messageId}", ur.deleteMessage)
@@ -53,7 +56,7 @@ func (ur *Router) NewRouter() *chi.Mux {
 
 // UI handlers
 func (ur *Router) loginPage(w http.ResponseWriter, req *http.Request) {
-	data := TemplateData{
+	data := common.LoginPageData{
 		Title: "Login",
 	}
 	RenderTemplate(w, "login.html", data)
@@ -63,7 +66,7 @@ func (ur *Router) processLogin(w http.ResponseWriter, req *http.Request) {
 	err := req.ParseForm()
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to parse login form")
-		data := TemplateData{
+		data := common.LoginPageData{
 			Title: "Login",
 			Error: "Invalid form data",
 		}
@@ -74,7 +77,7 @@ func (ur *Router) processLogin(w http.ResponseWriter, req *http.Request) {
 	token := req.FormValue("token")
 	if token != ur.authSecret {
 		log.Error().Msg("Invalid login token")
-		data := TemplateData{
+		data := common.LoginPageData{
 			Title: "Login",
 			Error: "Invalid authentication token",
 		}
@@ -119,180 +122,128 @@ func (ur *Router) processLogout(w http.ResponseWriter, req *http.Request) {
 	http.Redirect(w, req, "/ui/login", http.StatusFound)
 }
 
-func (ur *Router) dashboard(w http.ResponseWriter, req *http.Request) {
-	data := TemplateData{
-		Title: "Dashboard",
-		Queues: []QueueStats{
-			{Name: "emails", TotalMessages: 842, Ready: 842, Processing: 0, Failed: 0},
-			{Name: "emails-dlq", TotalMessages: 2, Ready: 2, Processing: 0, Failed: 2},
-			{Name: "notifications", TotalMessages: 325, Ready: 325, Processing: 0, Failed: 0},
-			{Name: "notifications-dlq", TotalMessages: 1, Ready: 1, Processing: 0, Failed: 1},
-			{Name: "reports", TotalMessages: 80, Ready: 80, Processing: 0, Failed: 0},
-			{Name: "reports-dlq", TotalMessages: 2, Ready: 2, Processing: 0, Failed: 2},
-		},
-		TotalQueues:   6,
-		TotalMessages: 1252,
-		FailedDLQ:     5,
+func (ur *Router) dashboardPage(w http.ResponseWriter, req *http.Request) {
+	dashboardData, err := ur.queuesService.GetQueuesStats(req.Context())
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
 	}
-	RenderTemplate(w, "dashboard-base.html", data)
+	RenderTemplate(w, "dashboard-base.html", dashboardData)
 }
 
-func (ur *Router) queueDetails(w http.ResponseWriter, req *http.Request) {
+func (ur *Router) queueDetailsPage(w http.ResponseWriter, req *http.Request) {
 	queueName := chi.URLParam(req, "queue")
 
-	// Get pagination parameters
-	page := 1
-	isLastPage := false
-	if pageStr := req.URL.Query().Get("page"); pageStr != "" {
-		if pageStr == "last" {
-			isLastPage = true
-		} else if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
-			page = p
-		}
+	queueStats, err := ur.queuesService.GetQueueStats(queueName, req.Context())
+	if err != nil {
+		log.Error().Err(err).Str("queue", queueName).Msg("failed to get queue stats")
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	if queueStats == nil {
+		http.NotFound(w, req)
+		return
 	}
 
-	// Determine if this is a DLQ queue
-	isDLQ := strings.HasSuffix(queueName, "-dlq")
-	queueType := "Regular"
-	if isDLQ {
-		queueType = "DLQ"
-	}
-
-	// Create dummy data based on queue type
-	var messages []MessageDetails
-	var queueDetails *QueueDetails
-
-	if isDLQ {
-		// DLQ queue with failed messages
-		messages = []MessageDetails{
-			{
-				ID:            "01234567-89ab-cdef-0123-456789abcdef",
-				Content:       `{"email": "user@example.com", "subject": "Welcome!", "body": "Welcome to our service!"}`,
-				Status:        "failed",
-				Attempts:      3,
-				ReceivedAt:    "2024-01-15 14:30:25",
-				Age:           "2 hours ago",
-				FailureReason: "SMTP server timeout after 30 seconds",
-			},
-			{
-				ID:            "fedcba98-7654-3210-fedc-ba9876543210",
-				Content:       `{"email": "admin@company.com", "subject": "System Alert", "body": "Database connection failed"}`,
-				Status:        "failed",
-				Attempts:      5,
-				ReceivedAt:    "2024-01-15 12:15:10",
-				Age:           "4 hours ago",
-				FailureReason: "Invalid email address format",
-			},
-		}
-
-		queueDetails = &QueueDetails{
-			Name:          queueName,
-			Type:          queueType,
-			IsDLQ:         true,
-			TotalMessages: len(messages),
-		}
-	} else {
-		// Regular queue with mixed status messages - create more for pagination testing
-		messages = []MessageDetails{}
-
-		// Generate 75 dummy messages to test pagination
-		statuses := []string{"ready", "processing", "ready"}
-		for i := 0; i < 75; i++ {
-			messages = append(messages, MessageDetails{
-				ID:         fmt.Sprintf("msg-%04d-2222-3333-4444-555555555555", i+1),
-				Content:    fmt.Sprintf(`{"email": "user%d@example.com", "subject": "Message %d", "body": "This is test message number %d"}`, i+1, i+1, i+1),
-				Status:     statuses[i%len(statuses)],
-				Attempts:   i % 3,
-				ReceivedAt: fmt.Sprintf("2024-01-15 %02d:%02d:00", 16-(i/10), 30-(i%60)),
-				Age:        fmt.Sprintf("%d minutes ago", i+1),
-			})
-		}
-
-		queueDetails = &QueueDetails{
-			Name:          queueName,
-			Type:          queueType,
-			IsDLQ:         false,
-			TotalMessages: len(messages),
-		}
-	}
-
-	// Pagination logic - efficient approach without COUNT
-	const messagesPerPage = 50
-	var paginatedMessages []MessageDetails
-	var hasNextPage bool
-	var currentPage int
-
-	if isLastPage {
-		// For last page, get the last 50 messages (they're already in reverse chronological order)
-		totalMessages := len(messages)
-		start := totalMessages - messagesPerPage
-		if start < 0 {
-			start = 0
-		}
-		paginatedMessages = messages[start:]
-		hasNextPage = false
-		// Calculate what page this would be
-		currentPage = int(math.Ceil(float64(totalMessages) / float64(messagesPerPage)))
-		if currentPage < 1 {
-			currentPage = 1
-		}
-	} else {
-		// Regular pagination - get messagesPerPage + 1 to check if more exist
-		start := (page - 1) * messagesPerPage
-		end := start + messagesPerPage + 1 // Get one extra to check if more exist
-
-		if start < len(messages) {
-			if end > len(messages) {
-				end = len(messages)
-			}
-
-			fetchedMessages := messages[start:end]
-
-			// Check if we have more messages
-			if len(fetchedMessages) > messagesPerPage {
-				hasNextPage = true
-				paginatedMessages = fetchedMessages[:messagesPerPage] // Remove the extra message
-			} else {
-				hasNextPage = false
-				paginatedMessages = fetchedMessages
-			}
-		}
-		currentPage = page
-	}
-
-	data := TemplateData{
-		Title:       queueName + " - Queue Details",
-		Queue:       queueDetails,
-		Messages:    paginatedMessages,
-		CurrentPage: currentPage,
-		HasNextPage: hasNextPage,
-		IsLastPage:  isLastPage,
+	data := common.QueuePageData{
+		Title: queueName + " - Queue Details",
+		Queue: queueStats,
 	}
 
 	RenderTemplate(w, "queue-base.html", data)
 }
 
 func (ur *Router) queueMessages(w http.ResponseWriter, req *http.Request) {
-	// TODO: Render message browser (HTMX component)
-	w.WriteHeader(http.StatusNotImplemented)
+	queueName := chi.URLParam(req, "queue")
+	cursor := req.URL.Query().Get("after")
+
+	const messagesLimit = 50
+
+	messagesData, err := ur.messagesService.GetMessagesForUI(queueName, cursor, messagesLimit, req.Context())
+	if err != nil {
+		log.Error().Err(err).Str("queue", queueName).Str("cursor", cursor).Msg("failed to get messages for UI")
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	// Choose template based on whether this is initial load or infinite scroll
+	template := "messages-component.html"
+	if cursor != "" {
+		// For infinite scroll, use append template
+		template = "messages-append.html"
+	}
+
+	RenderTemplate(w, template, messagesData)
+}
+
+func (ur *Router) messageDetails(w http.ResponseWriter, req *http.Request) {
+	queueName := chi.URLParam(req, "queue")
+	messageId := chi.URLParam(req, "messageId")
+
+	messageDetails, err := ur.messagesService.GetMessageDetails(messageId, queueName, req.Context())
+	if err != nil {
+		log.Error().Err(err).Str("queue", queueName).Str("message_id", messageId).Msg("failed to get message details")
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	if messageDetails == nil {
+		http.NotFound(w, req)
+		return
+	}
+
+	RenderTemplate(w, "message-details.html", messageDetails)
 }
 
 func (ur *Router) deleteAllMessages(w http.ResponseWriter, req *http.Request) {
-	// TODO: Delete all messages from queue
-	w.WriteHeader(http.StatusNotImplemented)
+	queueName := chi.URLParam(req, "queue")
+
+	err := ur.messagesService.DeleteAllDlqMessages(queueName, req.Context())
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	// Redirect to dashboard, as most likely the queue is now gone
+	// TODO: consider passing a message via query param to show that the operation was successful
+	w.Header().Set("HX-Redirect", "/ui")
+	w.WriteHeader(http.StatusOK)
 }
 
 func (ur *Router) requeueAllMessages(w http.ResponseWriter, req *http.Request) {
-	// TODO: Requeue all DLQ messages
-	w.WriteHeader(http.StatusNotImplemented)
+	queueName := chi.URLParam(req, "queue")
+
+	err := ur.messagesService.RequeueAllDlqMessages(queueName, req.Context())
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	// Redirect to dashboard, as most likely the DLQ is now empty
+	// TODO: consider passing a message via query param to show that the operation was successful
+	w.Header().Set("HX-Redirect", "/ui")
+	w.WriteHeader(http.StatusOK)
 }
 
 func (ur *Router) deleteMessage(w http.ResponseWriter, req *http.Request) {
-	// TODO: Delete specific message
-	w.WriteHeader(http.StatusNotImplemented)
+	messageId := chi.URLParam(req, "messageId")
+	queueName := chi.URLParam(req, "queue")
+
+	err := ur.messagesService.DeleteDlqMessage(messageId, queueName, req.Context())
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	// Respond with 200 OK to indicate success
+	w.WriteHeader(http.StatusOK)
 }
 
 func (ur *Router) requeueMessage(w http.ResponseWriter, req *http.Request) {
-	// TODO: Requeue specific DLQ message
-	w.WriteHeader(http.StatusNotImplemented)
+	messageId := chi.URLParam(req, "messageId")
+	queueName := chi.URLParam(req, "queue")
+
+	err := ur.messagesService.RequeueDlqMessage(messageId, queueName, req.Context())
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	// Respond with 200 OK to indicate success
+	w.WriteHeader(http.StatusOK)
 }

@@ -69,7 +69,7 @@ func (ar *Router) sendMessage(w http.ResponseWriter, req *http.Request) {
 func (ar *Router) fetchMessage(w http.ResponseWriter, req *http.Request) {
 	queueName := chi.URLParam(req, "queue")
 
-	message, err := ar.messagesService.FetchMessage(queueName, req.Context())
+	message, err := ar.messagesService.GetMessageForConsuming(queueName, req.Context())
 	if err != nil {
 		ar.sendResponseFromError(w, err)
 		return

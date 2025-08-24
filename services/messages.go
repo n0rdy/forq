@@ -2,9 +2,11 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"forq/common"
 	"forq/configs"
 	"forq/db"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -74,7 +76,7 @@ func (ms *MessagesService) ProcessNewMessage(newMessage common.NewMessageRequest
 	return nil
 }
 
-func (ms *MessagesService) FetchMessage(queueName string, ctx context.Context) (*common.MessageResponse, error) {
+func (ms *MessagesService) GetMessageForConsuming(queueName string, ctx context.Context) (*common.MessageResponse, error) {
 	start := time.Now()
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
@@ -113,4 +115,146 @@ func (ms *MessagesService) AckMessage(messageId string, queueName string, ctx co
 
 func (ms *MessagesService) NackMessage(messageId string, queueName string, ctx context.Context) error {
 	return ms.forqRepo.UpdateMessageOnConsumingFailure(messageId, queueName, ctx)
+}
+
+func (ms *MessagesService) RequeueAllDlqMessages(queueName string, ctx context.Context) error {
+	if !strings.HasSuffix(queueName, "-dlq") {
+		log.Error().Str("queue", queueName).Msg("attempt to requeue non-DLQ queue: only DLQ queues are supported for requeueing")
+		return common.ErrBadRequestDlqOnlyOp
+	}
+	return ms.forqRepo.RequeueDlqMessages(queueName, ctx)
+}
+
+func (ms *MessagesService) RequeueDlqMessage(messageId string, queueName string, ctx context.Context) error {
+	if !strings.HasSuffix(queueName, "-dlq") {
+		log.Error().Str("queue", queueName).Msg("attempt to requeue non-DLQ queue: only DLQ queues are supported for requeueing")
+		return common.ErrBadRequestDlqOnlyOp
+	}
+	return ms.forqRepo.RequeueDlqMessage(messageId, queueName, ctx)
+}
+
+func (ms *MessagesService) DeleteAllDlqMessages(queueName string, ctx context.Context) error {
+	if !strings.HasSuffix(queueName, "-dlq") {
+		log.Error().Str("queue", queueName).Msg("attempt to delete non-DLQ queue: only DLQ queues are supported for deleting all messages")
+		return common.ErrBadRequestDlqOnlyOp
+	}
+	return ms.forqRepo.DeleteAllMessagesFromQueue(queueName, ctx)
+}
+
+func (ms *MessagesService) DeleteDlqMessage(messageId string, queueName string, ctx context.Context) error {
+	if !strings.HasSuffix(queueName, "-dlq") {
+		log.Error().Str("queue", queueName).Msg("attempt to delete non-DLQ queue: only DLQ queues are supported for deleting messages")
+		return common.ErrBadRequestDlqOnlyOp
+	}
+	return ms.forqRepo.DeleteMessage(messageId, queueName, ctx)
+}
+
+func (ms *MessagesService) GetMessagesForUI(queueName string, cursor string, limit int, ctx context.Context) (*common.MessagesComponentData, error) {
+	// Fetch limit+1 to check if there are more messages
+	dbMessages, err := ms.forqRepo.SelectMessagesForUI(queueName, cursor, limit+1, ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if there are more messages and determine pagination
+	var hasMore bool
+	var messages []common.MessageMetadata
+	if len(dbMessages) > limit {
+		hasMore = true
+		messages = ms.convertToMessageMetadata(dbMessages[:limit])
+	} else {
+		hasMore = false
+		messages = ms.convertToMessageMetadata(dbMessages)
+	}
+
+	// Determine next cursor (last message ID)
+	var nextCursor string
+	if hasMore && len(messages) > 0 {
+		nextCursor = messages[len(messages)-1].ID
+	}
+
+	// Determine if this is a DLQ queue
+	isDLQ := strings.HasSuffix(queueName, "-dlq")
+
+	return &common.MessagesComponentData{
+		Messages:   messages,
+		NextCursor: nextCursor,
+		HasMore:    hasMore,
+		QueueName:  queueName,
+		IsDLQ:      isDLQ,
+	}, nil
+}
+
+func (ms *MessagesService) GetMessageDetails(messageId string, queueName string, ctx context.Context) (*common.MessageDetails, error) {
+	dbMessage, err := ms.forqRepo.SelectMessageDetails(messageId, queueName, ctx)
+	if err != nil {
+		return nil, err
+	}
+	if dbMessage == nil {
+		return nil, nil
+	}
+
+	return &common.MessageDetails{
+		ID:                  dbMessage.Id,
+		Content:             dbMessage.Content,
+		Status:              ms.convertStatusToString(dbMessage.Status),
+		Attempts:            dbMessage.Attempts,
+		ReceivedAt:          ms.formatTimestamp(dbMessage.ReceivedAt),
+		Age:                 ms.formatAge(dbMessage.ReceivedAt),
+		ProcessAfter:        ms.formatTimestamp(dbMessage.ProcessAfter),
+		ProcessingStartedAt: ms.formatTimestamp(dbMessage.ProcessingStartedAt),
+		FailureReason:       dbMessage.FailureReason,
+		UpdatedAt:           ms.formatTimestamp(dbMessage.UpdatedAt),
+	}, nil
+}
+
+func (ms *MessagesService) convertToMessageMetadata(dbMessages []db.MessageMetadata) []common.MessageMetadata {
+	var messages []common.MessageMetadata
+	for _, dbMsg := range dbMessages {
+		messages = append(messages, common.MessageMetadata{
+			ID:           dbMsg.Id,
+			Status:       ms.convertStatusToString(dbMsg.Status),
+			Attempts:     dbMsg.Attempts,
+			Age:          ms.formatAge(dbMsg.ReceivedAt),
+			ProcessAfter: ms.formatTimestamp(dbMsg.ProcessAfter),
+		})
+	}
+	return messages
+}
+
+func (ms *MessagesService) convertStatusToString(status int) string {
+	switch status {
+	case common.ReadyStatus:
+		return "ready"
+	case common.ProcessingStatus:
+		return "processing"
+	case common.FailedStatus:
+		return "failed"
+	default:
+		return "unknown"
+	}
+}
+
+func (ms *MessagesService) formatTimestamp(timestampMs int64) string {
+	if timestampMs == 0 {
+		return ""
+	}
+	return time.UnixMilli(timestampMs).Format("2006-01-02 15:04:05")
+}
+
+func (ms *MessagesService) formatAge(timestampMs int64) string {
+	if timestampMs == 0 {
+		return ""
+	}
+
+	duration := time.Since(time.UnixMilli(timestampMs))
+	if duration < time.Minute {
+		return fmt.Sprintf("%d seconds ago", int(duration.Seconds()))
+	} else if duration < time.Hour {
+		return fmt.Sprintf("%d minutes ago", int(duration.Minutes()))
+	} else if duration < 24*time.Hour {
+		return fmt.Sprintf("%d hours ago", int(duration.Hours()))
+	} else {
+		return fmt.Sprintf("%d days ago", int(duration.Hours()/24))
+	}
 }

@@ -1,5 +1,5 @@
 -- Enable WAL mode and other optimizations
-PRAGMA journal_mode = WAL;   -- Multiple consumers can read messages while new messages are being inserted
+PRAGMA journal_mode = WAL; -- Multiple consumers can read messages while new messages are being inserted
 PRAGMA synchronous = NORMAL; -- Safe in WAL mode, much faster than FULL
 PRAGMA busy_timeout = 10000; -- Handle concurrent access gracefully
 
@@ -20,6 +20,8 @@ CREATE TABLE messages
 );
 
 -- Optimized indexes for read/write heavy workload
+CREATE INDEX idx_queue ON messages (queue);
+CREATE INDEX idx_status ON messages (status);
 CREATE INDEX idx_consuming ON messages (queue, status, process_after, expires_after, received_at);
 CREATE INDEX idx_processing ON messages (status, processing_started_at) WHERE status = 1;
 CREATE INDEX idx_failed_regular ON messages (status, updated_at) WHERE is_dlq = FALSE AND status = 2;

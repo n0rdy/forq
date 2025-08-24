@@ -1,0 +1,104 @@
+{{if .Messages}}
+<!-- Messages loaded via infinite scroll - no traditional pagination -->
+
+<div class="overflow-x-auto">
+    <table class="table table-zebra">
+        <thead>
+        <tr>
+            <th>Message ID</th>
+            <th class="text-center">Status</th>
+            <th class="text-center">Attempts</th>
+            <th class="text-center">Age</th>
+            {{if .IsDLQ}}
+            <th>Actions</th>
+            {{end}}
+        </tr>
+        </thead>
+        <tbody>
+        {{range .Messages}}
+        <!-- Message metadata row (clickable) -->
+        <tr id="message-row-{{.ID}}" class="hover:bg-base-200 cursor-pointer"
+            hx-get="/ui/queue/{{$.QueueName}}/messages/{{.ID}}/details"
+            hx-target="#message-details-{{.ID}}"
+            hx-trigger="click"
+            hx-swap="innerHTML"
+            onclick="document.getElementById('message-details-{{.ID}}').classList.toggle('hidden')">
+            <td>
+                <div class="font-mono text-sm text-primary">{{.ID}}</div>
+                {{if .ProcessAfter}}
+                <div class="text-xs opacity-50">Process after: {{.ProcessAfter}}</div>
+                {{end}}
+            </td>
+            <td class="text-center">
+                {{if eq .Status "ready"}}
+                <span class="badge badge-outline">Ready</span>
+                {{else if eq .Status "processing"}}
+                <span class="badge badge-warning">Processing</span>
+                {{else if eq .Status "failed"}}
+                <span class="badge badge-error">Failed</span>
+                {{end}}
+            </td>
+            <td class="text-center">
+                <span class="badge badge-outline">{{.Attempts}}</span>
+            </td>
+            <td class="text-center">
+                <span class="text-sm">{{.Age}}</span>
+            </td>
+            {{if $.IsDLQ}}
+            <td onclick="event.stopPropagation()">
+                <div class="flex gap-1">
+                    <button class="btn btn-warning btn-xs"
+                            hx-post="/ui/queue/{{$.QueueName}}/messages/requeue/{{.ID}}"
+                            hx-target="#message-row-{{.ID}}" hx-swap="outerHTML"
+                            hx-confirm="Requeue this message?">Requeue
+                    </button>
+                    <button class="btn btn-error btn-xs"
+                            hx-delete="/ui/queue/{{$.QueueName}}/messages/{{.ID}}"
+                            hx-target="#message-row-{{.ID}}" hx-swap="outerHTML"
+                            hx-confirm="Delete this message permanently?">Delete
+                    </button>
+                </div>
+            </td>
+            {{end}}
+        </tr>
+
+        <!-- Expandable details row (initially hidden) -->
+        <tr id="message-details-{{.ID}}" class="hidden">
+            <td colspan="{{if $.IsDLQ}}5{{else}}4{{end}}" class="bg-base-50 border-l-4 border-primary">
+                <div class="p-4">
+                    <!-- Content will be loaded via HTMX when row is clicked -->
+                    <div class="flex items-center gap-2">
+                        <div class="loading loading-spinner loading-sm"></div>
+                        <span class="text-sm opacity-75">Loading message details...</span>
+                    </div>
+                </div>
+            </td>
+        </tr>
+        {{end}}
+        
+        <!-- Infinite scroll trigger inside table -->
+        {{if .HasMore}}
+        <tr>
+            <td colspan="{{if .IsDLQ}}5{{else}}4{{end}}" class="text-center py-4" 
+                hx-get="/ui/queue/{{.QueueName}}/messages?after={{.NextCursor}}"
+                hx-trigger="revealed"
+                hx-target="this"
+                hx-swap="outerHTML">
+                <div class="flex items-center justify-center gap-2">
+                    <div class="loading loading-spinner loading-sm"></div>
+                    <span class="text-sm opacity-75">Loading more messages...</span>
+                </div>
+            </td>
+        </tr>
+        {{end}}
+        </tbody>
+    </table>
+</div>
+
+{{else}}
+<div class="text-center py-8">
+    <div class="text-6xl opacity-20 mb-4">📭</div>
+    <h3 class="text-lg font-semibold mb-2">No messages found</h3>
+    <p class="text-sm opacity-75">This queue is currently empty.</p>
+</div>
+{{end}}
