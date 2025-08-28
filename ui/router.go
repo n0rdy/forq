@@ -1,11 +1,13 @@
 package ui
 
 import (
+	"crypto/rand"
 	"forq/common"
 	"forq/services"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/gorilla/csrf"
 	"github.com/rs/zerolog/log"
 )
 
@@ -14,32 +16,53 @@ type Router struct {
 	sessionsService *services.SessionsService
 	queuesService   *services.QueuesService
 	authSecret      string
+	csrfKey         []byte
 }
 
 func NewRouter(messagesService *services.MessagesService, sessionsService *services.SessionsService, queuesService *services.QueuesService, authSecret string) *Router {
+	// Generate a secure 32-byte key for CSRF tokens
+	csrfKey := make([]byte, 32)
+	if _, err := rand.Read(csrfKey); err != nil {
+		log.Fatal().Err(err).Msg("Failed to generate CSRF key")
+		panic(err)
+	}
+
 	return &Router{
 		messagesService: messagesService,
 		sessionsService: sessionsService,
 		queuesService:   queuesService,
 		authSecret:      authSecret,
+		csrfKey:         csrfKey,
 	}
 }
 
 func (ur *Router) NewRouter() *chi.Mux {
 	router := chi.NewRouter()
 
+	csrfMiddleware := csrf.Protect(
+		ur.csrfKey,
+		csrf.Secure(true),
+		csrf.Path("/ui"),
+		csrf.RequestHeader("X-CSRF-Token"), // looks for CSRF token in this header
+		csrf.ErrorHandler(http.HandlerFunc(ur.csrfErrorHandler)),
+	)
+
 	router.Route("/ui", func(r chi.Router) {
-		// Unprotected login routes
+		r.Use(csrfMiddleware) // Apply CSRF to all UI routes
+
+		// unprotected login routes (but with CSRF):
 		r.Get("/login", ur.loginPage)
 		r.Post("/login", ur.processLogin)
-		r.Post("/logout", ur.processLogout)
 
-		// Protected routes - apply middleware to specific routes
+		// logout needs both CSRF and session auth
+		r.With(sessionAuth(ur.sessionsService)).Post("/logout", ur.processLogout)
+
+		// protected routes:
 		r.With(sessionAuth(ur.sessionsService)).
 			Get("/", ur.dashboardPage)
 
 		r.Route("/queue/{queue}", func(r chi.Router) {
-			r.Use(sessionAuth(ur.sessionsService))
+			r.Use(sessionAuth(ur.sessionsService)) // Session auth for all queue routes
 
 			r.Get("/", ur.queueDetailsPage)
 			r.Get("/messages", ur.queueMessages)
@@ -54,7 +77,6 @@ func (ur *Router) NewRouter() *chi.Mux {
 	return router
 }
 
-// UI handlers
 func (ur *Router) loginPage(w http.ResponseWriter, req *http.Request) {
 	data := common.LoginPageData{
 		Title: "Login",
@@ -85,10 +107,8 @@ func (ur *Router) processLogin(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Create session
 	sessionId, _ := ur.sessionsService.CreateSession()
 
-	// Set session cookie
 	http.SetCookie(w, &http.Cookie{
 		Name:     "ForqSession",
 		Value:    sessionId,
@@ -98,7 +118,7 @@ func (ur *Router) processLogin(w http.ResponseWriter, req *http.Request) {
 		SameSite: http.SameSiteLaxMode,
 	})
 
-	// Redirect to dashboard
+	// redirects to dashboard on successful login
 	w.Header().Set("HX-Redirect", "/ui")
 	w.WriteHeader(http.StatusOK)
 }
@@ -109,16 +129,15 @@ func (ur *Router) processLogout(w http.ResponseWriter, req *http.Request) {
 		ur.sessionsService.InvalidateSession(sessionCookie.Value)
 	}
 
-	// Clear the session cookie
 	http.SetCookie(w, &http.Cookie{
 		Name:     "ForqSession",
 		Value:    "",
 		Path:     "/",
-		MaxAge:   -1, // Delete the cookie
+		MaxAge:   -1, // delete the cookie
 		HttpOnly: true,
 	})
 
-	// Redirect to login page
+	// redirects to login page
 	http.Redirect(w, req, "/ui/login", http.StatusFound)
 }
 
@@ -166,10 +185,10 @@ func (ur *Router) queueMessages(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Choose template based on whether this is initial load or infinite scroll
+	// chooses template based on whether this is initial load or infinite scroll
 	template := "messages-component.html"
 	if cursor != "" {
-		// For infinite scroll, use append template
+		// for infinite scroll, uses append template
 		template = "messages-append.html"
 	}
 
@@ -202,7 +221,7 @@ func (ur *Router) deleteAllMessages(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
-	// Redirect to dashboard, as most likely the queue is now gone
+	// redirects to dashboard, as most likely the queue is now gone
 	// TODO: consider passing a message via query param to show that the operation was successful
 	w.Header().Set("HX-Redirect", "/ui")
 	w.WriteHeader(http.StatusOK)
@@ -216,7 +235,7 @@ func (ur *Router) requeueAllMessages(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
-	// Redirect to dashboard, as most likely the DLQ is now empty
+	// redirects to dashboard, as most likely the DLQ is now empty
 	// TODO: consider passing a message via query param to show that the operation was successful
 	w.Header().Set("HX-Redirect", "/ui")
 	w.WriteHeader(http.StatusOK)
@@ -231,7 +250,6 @@ func (ur *Router) deleteMessage(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
-	// Respond with 200 OK to indicate success
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -244,6 +262,20 @@ func (ur *Router) requeueMessage(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
-	// Respond with 200 OK to indicate success
 	w.WriteHeader(http.StatusOK)
+}
+
+func (ur *Router) csrfErrorHandler(w http.ResponseWriter, r *http.Request) {
+	log.Error().Str("path", r.URL.Path).Str("method", r.Method).Msg("CSRF validation failed")
+
+	// For HTMX requests, return appropriate error
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("HX-Retarget", "body")
+		w.Header().Set("HX-Reswap", "innerHTML")
+		http.Error(w, "Security validation failed. Please refresh the page and try again.", http.StatusForbidden)
+		return
+	}
+
+	// For regular requests, redirect to login page
+	http.Redirect(w, r, "/ui/login", http.StatusFound)
 }

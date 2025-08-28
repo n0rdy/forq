@@ -6,7 +6,7 @@
             <h1 class="text-xl font-bold">Forq Admin Dashboard</h1>
         </div>
         <div class="navbar-end">
-            <form method="post" action="/ui/logout">
+            <form method="post" action="/ui/logout" hx-headers='{"X-CSRF-Token": "{{csrf.Token .}}"}'>
                 <button class="btn btn-ghost btn-sm">Logout</button>
             </form>
         </div>

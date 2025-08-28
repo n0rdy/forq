@@ -19,7 +19,7 @@
                 <div class="card-body">
                     <h2 class="card-title justify-center mb-4">Forq Admin</h2>
                     
-                    <form hx-post="/ui/login" hx-target="body">
+                    <form hx-post="/ui/login" hx-target="body" hx-headers='{"X-CSRF-Token": "{{csrf.Token .}}"}'>
                         <div class="form-control">
                             <input 
                                 type="password" 
