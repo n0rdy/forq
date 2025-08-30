@@ -34,13 +34,13 @@
                     hx-post="/ui/queue/{{$.QueueName}}/messages/requeue/{{.ID}}"
                     hx-target="#message-row-{{.ID}}" hx-swap="outerHTML"
                     hx-confirm="Requeue this message?"
-                    hx-headers='{"X-CSRF-Token": "{{csrf.Token $}}"}'>Requeue
+                    hx-headers='{"X-CSRF-Token": "{{$.CSRFToken}}"}'>Requeue
             </button>
             <button class="btn btn-error btn-xs"
                     hx-delete="/ui/queue/{{$.QueueName}}/messages/{{.ID}}"
                     hx-target="#message-row-{{.ID}}" hx-swap="outerHTML"
                     hx-confirm="Delete this message permanently?"
-                    hx-headers='{"X-CSRF-Token": "{{csrf.Token $}}"}'>Delete
+                    hx-headers='{"X-CSRF-Token": "{{$.CSRFToken}}"}'>Delete
             </button>
         </div>
     </td>

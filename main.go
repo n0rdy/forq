@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"forq/api"
+	"forq/common"
 	"forq/configs"
 	"forq/db"
 	"forq/jobs/cleanup"
@@ -24,6 +25,12 @@ import (
 )
 
 func main() {
+	env := getEnv()
+	if !common.SupportedEnvs[env] {
+		log.Fatal().Msgf("unsupported environment: %s", env)
+		panic(fmt.Sprintf("unsupported environment: %s", env))
+	}
+
 	authSecret := getAuthSecret()
 	if authSecret == "" {
 		log.Fatal().Msg("auth secret is not provided: either set FORQ_AUTH_SECRET environment variable or pass it as a command line argument --auth-secret")
@@ -47,6 +54,7 @@ func main() {
 	}
 	defer repo.Close()
 
+	queuesService := services.NewQueuesService(repo)
 	messagesService := services.NewMessagesService(repo, appConfigs)
 	sessionsService := services.NewSessionsService()
 	defer sessionsService.Close()
@@ -84,7 +92,7 @@ func main() {
 	}
 
 	// Create UI router (HTTP/1.1 + HTTP/2)
-	uiRouter := ui.NewRouter(messagesService, sessionsService, authSecret)
+	uiRouter := ui.NewRouter(messagesService, sessionsService, queuesService, authSecret, env)
 
 	// UI server protocols - HTTP/1.1 + HTTP/2 for browser compatibility
 	var uiProtocols http.Protocols
@@ -163,6 +171,18 @@ func getAuthSecret() string {
 	flag.Parse()
 
 	return flagAuthSecret
+}
+
+func getEnv() string {
+	env := os.Getenv("FORQ_ENV")
+	if env != "" {
+		return env
+	}
+
+	var flagEnv string
+	flag.StringVar(&flagEnv, "env", common.ProEnv, "Application environment ("+common.LocalEnv+"|"+common.ProEnv+")")
+	flag.Parse()
+	return flagEnv
 }
 
 func runMigrations(dbPath string) {

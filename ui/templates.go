@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"path/filepath"
 
+	"github.com/justinas/nosurf"
 	"github.com/rs/zerolog/log"
 )
 
@@ -27,10 +28,24 @@ func init() {
 	}
 }
 
-// RenderTemplate renders a template with the given data
-func RenderTemplate(w http.ResponseWriter, templateName string, data interface{}) {
+// RenderTemplate renders a template with the given data and CSRF token
+func RenderTemplate(w http.ResponseWriter, req *http.Request, templateName string, data interface{}) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	err := templates.ExecuteTemplate(w, templateName, data)
+
+	// Create template data that includes both the original data and CSRF token
+	templateData := map[string]interface{}{
+		"Data":      data,
+		"CSRFToken": nosurf.Token(req),
+	}
+
+	// If data is already a map, merge its fields to top level for convenience
+	if dataMap, ok := data.(map[string]interface{}); ok {
+		for key, value := range dataMap {
+			templateData[key] = value
+		}
+	}
+
+	err := templates.ExecuteTemplate(w, templateName, templateData)
 	if err != nil {
 		log.Error().Err(err).Str("template", templateName).Msg("Failed to render template")
 		http.Error(w, "Internal server error", http.StatusInternalServerError)

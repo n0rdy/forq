@@ -1,13 +1,11 @@
 package ui
 
 import (
-	"crypto/rand"
 	"forq/common"
 	"forq/services"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/gorilla/csrf"
 	"github.com/rs/zerolog/log"
 )
 
@@ -16,53 +14,37 @@ type Router struct {
 	sessionsService *services.SessionsService
 	queuesService   *services.QueuesService
 	authSecret      string
-	csrfKey         []byte
+	env             string
 }
 
-func NewRouter(messagesService *services.MessagesService, sessionsService *services.SessionsService, queuesService *services.QueuesService, authSecret string) *Router {
-	// Generate a secure 32-byte key for CSRF tokens
-	csrfKey := make([]byte, 32)
-	if _, err := rand.Read(csrfKey); err != nil {
-		log.Fatal().Err(err).Msg("Failed to generate CSRF key")
-		panic(err)
-	}
-
+func NewRouter(messagesService *services.MessagesService, sessionsService *services.SessionsService, queuesService *services.QueuesService, authSecret string, env string) *Router {
 	return &Router{
 		messagesService: messagesService,
 		sessionsService: sessionsService,
 		queuesService:   queuesService,
 		authSecret:      authSecret,
-		csrfKey:         csrfKey,
+		env:             env,
 	}
 }
 
 func (ur *Router) NewRouter() *chi.Mux {
 	router := chi.NewRouter()
 
-	csrfMiddleware := csrf.Protect(
-		ur.csrfKey,
-		csrf.Secure(true),
-		csrf.Path("/ui"),
-		csrf.RequestHeader("X-CSRF-Token"), // looks for CSRF token in this header
-		csrf.ErrorHandler(http.HandlerFunc(ur.csrfErrorHandler)),
-	)
-
 	router.Route("/ui", func(r chi.Router) {
-		r.Use(csrfMiddleware) // Apply CSRF to all UI routes
+		r.Use(csrfPrevention(ur.csrfErrorHandler, ur.env))
 
-		// unprotected login routes (but with CSRF):
+		// unprotected login routes:
 		r.Get("/login", ur.loginPage)
 		r.Post("/login", ur.processLogin)
-
-		// logout needs both CSRF and session auth
-		r.With(sessionAuth(ur.sessionsService)).Post("/logout", ur.processLogout)
 
 		// protected routes:
 		r.With(sessionAuth(ur.sessionsService)).
 			Get("/", ur.dashboardPage)
 
+		r.With(sessionAuth(ur.sessionsService)).Post("/logout", ur.processLogout)
+
 		r.Route("/queue/{queue}", func(r chi.Router) {
-			r.Use(sessionAuth(ur.sessionsService)) // Session auth for all queue routes
+			r.Use(sessionAuth(ur.sessionsService)) // session auth for all queue routes
 
 			r.Get("/", ur.queueDetailsPage)
 			r.Get("/messages", ur.queueMessages)
@@ -81,7 +63,8 @@ func (ur *Router) loginPage(w http.ResponseWriter, req *http.Request) {
 	data := common.LoginPageData{
 		Title: "Login",
 	}
-	RenderTemplate(w, "login.html", data)
+
+	RenderTemplate(w, req, "login.html", data)
 }
 
 func (ur *Router) processLogin(w http.ResponseWriter, req *http.Request) {
@@ -92,7 +75,7 @@ func (ur *Router) processLogin(w http.ResponseWriter, req *http.Request) {
 			Title: "Login",
 			Error: "Invalid form data",
 		}
-		RenderTemplate(w, "login.html", data)
+		RenderTemplate(w, req, "login.html", data)
 		return
 	}
 
@@ -103,7 +86,7 @@ func (ur *Router) processLogin(w http.ResponseWriter, req *http.Request) {
 			Title: "Login",
 			Error: "Invalid authentication token",
 		}
-		RenderTemplate(w, "login.html", data)
+		RenderTemplate(w, req, "login.html", data)
 		return
 	}
 
@@ -147,7 +130,7 @@ func (ur *Router) dashboardPage(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
-	RenderTemplate(w, "dashboard-base.html", dashboardData)
+	RenderTemplate(w, req, "dashboard-base.html", dashboardData)
 }
 
 func (ur *Router) queueDetailsPage(w http.ResponseWriter, req *http.Request) {
@@ -169,7 +152,7 @@ func (ur *Router) queueDetailsPage(w http.ResponseWriter, req *http.Request) {
 		Queue: queueStats,
 	}
 
-	RenderTemplate(w, "queue-base.html", data)
+	RenderTemplate(w, req, "queue-base.html", data)
 }
 
 func (ur *Router) queueMessages(w http.ResponseWriter, req *http.Request) {
@@ -192,7 +175,7 @@ func (ur *Router) queueMessages(w http.ResponseWriter, req *http.Request) {
 		template = "messages-append.html"
 	}
 
-	RenderTemplate(w, template, messagesData)
+	RenderTemplate(w, req, template, messagesData)
 }
 
 func (ur *Router) messageDetails(w http.ResponseWriter, req *http.Request) {
@@ -210,7 +193,7 @@ func (ur *Router) messageDetails(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	RenderTemplate(w, "message-details.html", messageDetails)
+	RenderTemplate(w, req, "message-details.html", messageDetails)
 }
 
 func (ur *Router) deleteAllMessages(w http.ResponseWriter, req *http.Request) {
@@ -266,7 +249,10 @@ func (ur *Router) requeueMessage(w http.ResponseWriter, req *http.Request) {
 }
 
 func (ur *Router) csrfErrorHandler(w http.ResponseWriter, r *http.Request) {
-	log.Error().Str("path", r.URL.Path).Str("method", r.Method).Msg("CSRF validation failed")
+	log.Error().
+		Str("path", r.URL.Path).
+		Str("method", r.Method).
+		Msg("CSRF validation failed")
 
 	// For HTMX requests, return appropriate error
 	if r.Header.Get("HX-Request") == "true" {
