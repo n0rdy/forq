@@ -1,4 +1,4 @@
-{{if .Messages}}
+{{if .Data.Messages}}
 <!-- Messages loaded via infinite scroll - no traditional pagination -->
 
 <div class="overflow-x-auto">
@@ -9,16 +9,16 @@
             <th class="text-center">Status</th>
             <th class="text-center">Attempts</th>
             <th class="text-center">Age</th>
-            {{if .IsDLQ}}
+            {{if .Data.IsDLQ}}
             <th>Actions</th>
             {{end}}
         </tr>
         </thead>
         <tbody>
-        {{range .Messages}}
+        {{range .Data.Messages}}
         <!-- Message metadata row (clickable) -->
         <tr id="message-row-{{.ID}}" class="hover:bg-base-200 cursor-pointer"
-            hx-get="/ui/queue/{{$.QueueName}}/messages/{{.ID}}/details"
+            hx-get="/ui/queue/{{$.Data.QueueName}}/messages/{{.ID}}/details"
             hx-target="#message-details-{{.ID}}"
             hx-trigger="click"
             hx-swap="innerHTML"
@@ -44,17 +44,17 @@
             <td class="text-center">
                 <span class="text-sm">{{.Age}}</span>
             </td>
-            {{if $.IsDLQ}}
+            {{if $.Data.IsDLQ}}
             <td onclick="event.stopPropagation()">
                 <div class="flex gap-1">
                     <button class="btn btn-warning btn-xs"
-                            hx-post="/ui/queue/{{$.QueueName}}/messages/requeue/{{.ID}}"
+                            hx-post="/ui/queue/{{$.Data.QueueName}}/messages/requeue/{{.ID}}"
                             hx-target="#message-row-{{.ID}}" hx-swap="outerHTML"
                             hx-confirm="Requeue this message?"
                             hx-headers='{"X-CSRF-Token": "{{$.CSRFToken}}"}'>Requeue
                     </button>
                     <button class="btn btn-error btn-xs"
-                            hx-delete="/ui/queue/{{$.QueueName}}/messages/{{.ID}}"
+                            hx-delete="/ui/queue/{{$.Data.QueueName}}/messages/{{.ID}}"
                             hx-target="#message-row-{{.ID}}" hx-swap="outerHTML"
                             hx-confirm="Delete this message permanently?"
                             hx-headers='{"X-CSRF-Token": "{{$.CSRFToken}}"}'>Delete
@@ -66,7 +66,7 @@
 
         <!-- Expandable details row (initially hidden) -->
         <tr id="message-details-{{.ID}}" class="hidden">
-            <td colspan="{{if $.IsDLQ}}5{{else}}4{{end}}" class="bg-base-50 border-l-4 border-primary">
+            <td colspan="{{if $.Data.IsDLQ}}5{{else}}4{{end}}" class="bg-base-50 border-l-4 border-primary">
                 <div class="p-4">
                     <!-- Content will be loaded via HTMX when row is clicked -->
                     <div class="flex items-center gap-2">
@@ -79,10 +79,10 @@
         {{end}}
         
         <!-- Infinite scroll trigger inside table -->
-        {{if .HasMore}}
+        {{if .Data.HasMore}}
         <tr>
-            <td colspan="{{if .IsDLQ}}5{{else}}4{{end}}" class="text-center py-4" 
-                hx-get="/ui/queue/{{.QueueName}}/messages?after={{.NextCursor}}"
+            <td colspan="{{if .Data.IsDLQ}}5{{else}}4{{end}}" class="text-center py-4" 
+                hx-get="/ui/queue/{{.Data.QueueName}}/messages?after={{.Data.NextCursor}}"
                 hx-trigger="revealed"
                 hx-target="this"
                 hx-swap="outerHTML">

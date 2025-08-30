@@ -5,8 +5,8 @@
         <div class="navbar-start">
             <div class="flex items-center gap-2">
                 <a href="/ui" class="btn btn-ghost text-sm">← Dashboard</a>
-                <div class="text-xl font-bold">{{.Queue.Name}}</div>
-                <div class="badge {{if eq .Queue.Type "DLQ"}}badge-error{{else}}badge-primary{{end}}">{{.Queue.Type}}</div>
+                <div class="text-xl font-bold">{{.Data.Queue.Name}}</div>
+                <div class="badge {{if eq .Data.Queue.Type "DLQ"}}badge-error{{else}}badge-primary{{end}}">{{.Data.Queue.Type}}</div>
             </div>
         </div>
         <div class="navbar-end">
@@ -21,21 +21,21 @@
 <div class="stats stats-vertical lg:stats-horizontal shadow mb-6 w-full">
     <div class="stat text-center">
         <div class="stat-title">Total Messages</div>
-        <div class="stat-value">{{.Queue.TotalMessages}}</div>
-        <div class="stat-desc">{{if eq .Queue.Type "DLQ"}}Failed messages needing attention{{else}}Current queue
+        <div class="stat-value">{{.Data.Queue.TotalMessages}}</div>
+        <div class="stat-desc">{{if eq .Data.Queue.Type "DLQ"}}Failed messages needing attention{{else}}Current queue
             workload{{end}}
         </div>
     </div>
 </div>
 
 <!-- Queue Actions -->
-{{if eq .Queue.Type "DLQ"}}
+{{if eq .Data.Queue.Type "DLQ"}}
 <div class="card bg-base-100 shadow-xl mb-6">
     <div class="card-body">
         <h2 class="card-title text-error">DLQ Actions</h2>
         <p class="text-sm opacity-75">Dead Letter Queue contains failed messages that need manual intervention.</p>
         <div class="card-actions justify-end">
-            <button class="btn btn-warning" hx-post="/ui/queue/{{.Queue.Name}}/messages/requeue"
+            <button class="btn btn-warning" hx-post="/ui/queue/{{.Data.Queue.Name}}/messages/requeue"
                     hx-confirm="Are you sure you want to requeue all messages?"
                     hx-headers='{"X-CSRF-Token": "{{.CSRFToken}}"}'>
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="w-4 h-4 stroke-current">
@@ -44,7 +44,7 @@
                 </svg>
                 Requeue All
             </button>
-            <button class="btn btn-error" hx-delete="/ui/queue/{{.Queue.Name}}/messages"
+            <button class="btn btn-error" hx-delete="/ui/queue/{{.Data.Queue.Name}}/messages"
                     hx-confirm="Are you sure you want to permanently delete all messages? This cannot be undone."
                     hx-headers='{"X-CSRF-Token": "{{.CSRFToken}}"}'>
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="w-4 h-4 stroke-current">
@@ -65,7 +65,7 @@
             <h2 class="card-title">Messages</h2>
             <div class="flex gap-2">
                 <button class="btn btn-sm btn-outline" 
-                        hx-get="/ui/queue/{{.Queue.Name}}/messages"
+                        hx-get="/ui/queue/{{.Data.Queue.Name}}/messages"
                         hx-target="#messages-container">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                          class="w-4 h-4 stroke-current">
@@ -79,7 +79,7 @@
 
         <!-- Messages will be loaded here via HTMX (cursor-based) -->
         <div id="messages-container" 
-             hx-get="/ui/queue/{{.Queue.Name}}/messages" 
+             hx-get="/ui/queue/{{.Data.Queue.Name}}/messages" 
              hx-trigger="load"
              hx-indicator="#messages-loading">
             <!-- Loading indicator -->

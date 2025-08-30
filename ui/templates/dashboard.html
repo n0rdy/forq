@@ -16,13 +16,13 @@
     <div class="stats stats-vertical lg:stats-horizontal shadow mb-6 w-full">
         <div class="stat text-center">
             <div class="stat-title">Total Queues</div>
-            <div class="stat-value">6</div>
-            <div class="stat-desc">3 regular + 3 DLQ</div>
+            <div class="stat-value">{{.Data.TotalQueues}}</div>
+            <div class="stat-desc">Active queues</div>
         </div>
 
         <div class="stat text-center">
             <div class="stat-title">Total Messages</div>
-            <div class="stat-value">1,247</div>
+            <div class="stat-value">{{.Data.TotalMessages}}</div>
             <div class="stat-desc">Across all queues</div>
         </div>
 
@@ -33,7 +33,7 @@
                 </svg>
             </div>
             <div class="stat-title">DLQ Messages</div>
-            <div class="stat-value text-error">5</div>
+            <div class="stat-value text-error">{{.Data.DLQMessages}}</div>
             <div class="stat-desc">Need attention</div>
         </div>
     </div>
@@ -53,126 +53,42 @@
                         </tr>
                     </thead>
                     <tbody>
+                        {{if .Data.Queues}}
+                        {{range .Data.Queues}}
                         <tr>
                             <td>
                                 <div class="flex items-center gap-3">
                                     <div class="avatar placeholder">
                                         <div class="bg-neutral text-neutral-content rounded-full w-8">
-                                            <span class="text-xs">E</span>
+                                            <span class="text-xs">Q</span>
                                         </div>
                                     </div>
                                     <div>
-                                        <a href="/ui/queue/emails" class="font-bold link link-primary">emails</a>
+                                        <a href="/ui/queue/{{.Name}}" class="font-bold link link-primary">{{.Name}}</a>
                                     </div>
                                 </div>
                             </td>
                             <td class="text-center">
-                                <span class="badge badge-primary">Regular</span>
-                            </td>
-                            <td class="text-center">
-                                <span class="badge badge-outline">842</span>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td>
-                                <div class="flex items-center gap-3">
-                                    <div class="avatar placeholder">
-                                        <div class="bg-neutral text-neutral-content rounded-full w-8">
-                                            <span class="text-xs">E</span>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <a href="/ui/queue/emails-dlq" class="font-bold link link-primary">emails-dlq</a>
-                                    </div>
-                                </div>
-                            </td>
-                            <td class="text-center">
+                                {{if eq .Type "DLQ"}}
                                 <span class="badge badge-error">DLQ</span>
-                            </td>
-                            <td class="text-center">
-                                <span class="badge badge-outline">2</span>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td>
-                                <div class="flex items-center gap-3">
-                                    <div class="avatar placeholder">
-                                        <div class="bg-neutral text-neutral-content rounded-full w-8">
-                                            <span class="text-xs">N</span>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <a href="/ui/queue/notifications" class="font-bold link link-primary">notifications</a>
-                                    </div>
-                                </div>
-                            </td>
-                            <td class="text-center">
+                                {{else}}
                                 <span class="badge badge-primary">Regular</span>
+                                {{end}}
                             </td>
                             <td class="text-center">
-                                <span class="badge badge-outline">325</span>
+                                <span class="badge badge-outline">{{.TotalMessages}}</span>
                             </td>
                         </tr>
+                        {{end}}
+                        {{else}}
                         <tr>
-                            <td>
-                                <div class="flex items-center gap-3">
-                                    <div class="avatar placeholder">
-                                        <div class="bg-neutral text-neutral-content rounded-full w-8">
-                                            <span class="text-xs">N</span>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <a href="/ui/queue/notifications-dlq" class="font-bold link link-primary">notifications-dlq</a>
-                                    </div>
-                                </div>
-                            </td>
-                            <td class="text-center">
-                                <span class="badge badge-error">DLQ</span>
-                            </td>
-                            <td class="text-center">
-                                <span class="badge badge-outline">1</span>
+                            <td colspan="3" class="text-center py-8">
+                                <div class="text-6xl opacity-20 mb-4">📭</div>
+                                <h3 class="text-lg font-semibold mb-2">No queues found</h3>
+                                <p class="text-sm opacity-75">Start sending messages to create queues automatically.</p>
                             </td>
                         </tr>
-                        <tr>
-                            <td>
-                                <div class="flex items-center gap-3">
-                                    <div class="avatar placeholder">
-                                        <div class="bg-neutral text-neutral-content rounded-full w-8">
-                                            <span class="text-xs">R</span>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <a href="/ui/queue/reports" class="font-bold link link-primary">reports</a>
-                                    </div>
-                                </div>
-                            </td>
-                            <td class="text-center">
-                                <span class="badge badge-primary">Regular</span>
-                            </td>
-                            <td class="text-center">
-                                <span class="badge badge-outline">80</span>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td>
-                                <div class="flex items-center gap-3">
-                                    <div class="avatar placeholder">
-                                        <div class="bg-neutral text-neutral-content rounded-full w-8">
-                                            <span class="text-xs">R</span>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <a href="/ui/queue/reports-dlq" class="font-bold link link-primary">reports-dlq</a>
-                                    </div>
-                                </div>
-                            </td>
-                            <td class="text-center">
-                                <span class="badge badge-error">DLQ</span>
-                            </td>
-                            <td class="text-center">
-                                <span class="badge badge-outline">2</span>
-                            </td>
-                        </tr>
+                        {{end}}
                     </tbody>
                 </table>
             </div>

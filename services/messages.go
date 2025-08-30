@@ -194,6 +194,16 @@ func (ms *MessagesService) GetMessageDetails(messageId string, queueName string,
 		return nil, nil
 	}
 
+	processingStartedAt := ""
+	if dbMessage.ProcessingStartedAt != nil {
+		processingStartedAt = ms.formatTimestamp(*dbMessage.ProcessingStartedAt)
+	}
+
+	failureReason := ""
+	if dbMessage.FailureReason != nil {
+		failureReason = *dbMessage.FailureReason
+	}
+
 	return &common.MessageDetails{
 		ID:                  dbMessage.Id,
 		Content:             dbMessage.Content,
@@ -202,8 +212,8 @@ func (ms *MessagesService) GetMessageDetails(messageId string, queueName string,
 		ReceivedAt:          ms.formatTimestamp(dbMessage.ReceivedAt),
 		Age:                 ms.formatAge(dbMessage.ReceivedAt),
 		ProcessAfter:        ms.formatTimestamp(dbMessage.ProcessAfter),
-		ProcessingStartedAt: ms.formatTimestamp(dbMessage.ProcessingStartedAt),
-		FailureReason:       dbMessage.FailureReason,
+		ProcessingStartedAt: processingStartedAt,
+		FailureReason:       failureReason,
 		UpdatedAt:           ms.formatTimestamp(dbMessage.UpdatedAt),
 	}, nil
 }

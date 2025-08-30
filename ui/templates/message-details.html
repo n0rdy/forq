@@ -3,16 +3,16 @@
     <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
             <h4 class="font-semibold">Message Details</h4>
-            {{if eq .Status "ready"}}
+            {{if eq .Data.Status "ready"}}
             <span class="badge badge-outline">Ready</span>
-            {{else if eq .Status "processing"}}
+            {{else if eq .Data.Status "processing"}}
             <span class="badge badge-warning">Processing</span>
-            {{else if eq .Status "failed"}}
+            {{else if eq .Data.Status "failed"}}
             <span class="badge badge-error">Failed</span>
             {{end}}
         </div>
         <button class="btn btn-ghost btn-xs" 
-                onclick="document.getElementById('message-details-{{.ID}}').classList.add('hidden')">
+                onclick="document.getElementById('message-details-{{.Data.ID}}').classList.add('hidden')">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -23,40 +23,40 @@
     <div class="grid grid-cols-2 gap-4">
         <div>
             <label class="text-xs font-medium opacity-75">Message ID</label>
-            <div class="font-mono text-sm bg-base-200 p-2 rounded mt-1">{{.ID}}</div>
+            <div class="font-mono text-sm bg-base-200 p-2 rounded mt-1">{{.Data.ID}}</div>
         </div>
         <div>
             <label class="text-xs font-medium opacity-75">Attempts</label>
-            <div class="text-sm mt-1">{{.Attempts}}</div>
+            <div class="text-sm mt-1">{{.Data.Attempts}}</div>
         </div>
         <div>
             <label class="text-xs font-medium opacity-75">Received At</label>
-            <div class="text-sm mt-1">{{.ReceivedAt}} ({{.Age}})</div>
+            <div class="text-sm mt-1">{{.Data.ReceivedAt}} ({{.Data.Age}})</div>
         </div>
         <div>
             <label class="text-xs font-medium opacity-75">Updated At</label>
-            <div class="text-sm mt-1">{{.UpdatedAt}}</div>
+            <div class="text-sm mt-1">{{.Data.UpdatedAt}}</div>
         </div>
-        {{if .ProcessAfter}}
+        {{if .Data.ProcessAfter}}
         <div>
             <label class="text-xs font-medium opacity-75">Process After</label>
-            <div class="text-sm mt-1">{{.ProcessAfter}}</div>
+            <div class="text-sm mt-1">{{.Data.ProcessAfter}}</div>
         </div>
         {{end}}
-        {{if .ProcessingStartedAt}}
+        {{if .Data.ProcessingStartedAt}}
         <div>
             <label class="text-xs font-medium opacity-75">Processing Started</label>
-            <div class="text-sm mt-1">{{.ProcessingStartedAt}}</div>
+            <div class="text-sm mt-1">{{.Data.ProcessingStartedAt}}</div>
         </div>
         {{end}}
     </div>
 
     <!-- Failure reason (if applicable) -->
-    {{if .FailureReason}}
+    {{if .Data.FailureReason}}
     <div>
         <label class="text-xs font-medium opacity-75">Failure Reason</label>
         <div class="text-sm text-error bg-error/10 p-3 rounded border-l-4 border-error mt-1">
-            {{.FailureReason}}
+            {{.Data.FailureReason}}
         </div>
     </div>
     {{end}}
@@ -66,7 +66,7 @@
         <label class="text-xs font-medium opacity-75">Content</label>
         <div class="mt-1">
             <div class="mockup-code text-xs">
-                <pre><code>{{.Content}}</code></pre>
+                <pre><code>{{.Data.Content}}</code></pre>
             </div>
         </div>
     </div>

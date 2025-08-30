@@ -29,8 +29,8 @@ type MessageDetails struct {
 	Status              int
 	Attempts            int
 	ProcessAfter        int64
-	ProcessingStartedAt int64
-	FailureReason       string
+	ProcessingStartedAt *int64
+	FailureReason       *string
 	ReceivedAt          int64
 	UpdatedAt           int64
 	ExpiresAfter        int64

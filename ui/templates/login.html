@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{.Title}} - Forq Admin UI</title>
+    <title>{{.Data.Title}} - Forq Admin UI</title>
     
     <!-- DaisyUI v5 + Tailwind CSS (Official CDN) -->
     <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
@@ -31,12 +31,12 @@
                             />
                         </div>
                         
-                        {{if .Error}}
+                        {{if .Data.Error}}
                         <div class="alert alert-error mt-4">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 shrink-0 stroke-current" fill="none" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
-                            <span>{{.Error}}</span>
+                            <span>{{.Data.Error}}</span>
                         </div>
                         {{end}}
                         
