@@ -258,6 +258,12 @@ func (ms *MessagesService) formatAge(timestampMs int64) string {
 	}
 
 	duration := time.Since(time.UnixMilli(timestampMs))
+
+	// Handle negative durations (future timestamps) by taking absolute value
+	if duration < 0 {
+		duration = -duration
+	}
+
 	if duration < time.Minute {
 		return fmt.Sprintf("%d seconds ago", int(duration.Seconds()))
 	} else if duration < time.Hour {
