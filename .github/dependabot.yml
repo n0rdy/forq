@@ -10,6 +10,8 @@ updates:
       timezone: "Europe/Oslo"
     assignees:
       - "n0rdy"
+    # Enables security updates only
+    open-pull-requests-limit: 0
   - package-ecosystem: "github-actions"
     target-branch: "main"
     directory: "/"
@@ -19,6 +21,8 @@ updates:
       timezone: "Europe/Oslo"
     assignees:
       - "n0rdy"
+    # Enables security updates only
+    open-pull-requests-limit: 0
 
   # Weekly updates for all packages
   - package-ecosystem: "gomod"
@@ -30,6 +34,10 @@ updates:
       timezone: "Europe/Oslo"
     assignees:
       - "n0rdy"
+    groups:
+      gomod:
+        patterns:
+          - "**"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
@@ -39,3 +47,7 @@ updates:
       timezone: "Europe/Oslo"
     assignees:
       - "n0rdy"
+    groups:
+      gomod:
+        patterns:
+          - "**"
