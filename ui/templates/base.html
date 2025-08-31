@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en" data-theme="light" id="html-root">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -19,5 +19,18 @@
 </head>
 <body class="min-h-screen bg-base-200">
     {{template "content" .}}
+    
+    <script>
+        // Theme management
+        (function() {
+            const htmlRoot = document.getElementById('html-root');
+            
+            // Get saved theme or default to light
+            const savedTheme = localStorage.getItem('forq-theme') || 'light';
+            
+            // Apply theme on page load
+            htmlRoot.setAttribute('data-theme', savedTheme);
+        })();
+    </script>
 </body>
 </html>

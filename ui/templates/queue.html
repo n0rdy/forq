@@ -4,14 +4,24 @@
     <div class="navbar bg-base-100 rounded-box shadow-sm mb-6">
         <div class="navbar-start">
             <div class="flex items-center gap-2">
-                <a href="/ui" class="btn btn-ghost text-sm">← Dashboard</a>
+                <a href="/" class="btn btn-ghost text-sm">← Dashboard</a>
                 <div class="text-xl font-bold">{{.Data.Queue.Name}}</div>
                 <div class="badge {{if eq .Data.Queue.Type "DLQ"}}badge-error{{else}}badge-primary{{end}}">{{.Data.Queue.Type}}</div>
             </div>
         </div>
-        <div class="navbar-end">
-            <form hx-post="/ui/logout" hx-target="body" hx-confirm="Are you sure you want to log out?" hx-headers='{"X-CSRF-Token": "{{.CSRFToken}}"}'>
-                <button class="btn btn-ghost">Logout</button>
+        <div class="navbar-end gap-2">
+            <!-- Theme Toggle -->
+            <button id="theme-toggle" class="btn btn-ghost btn-sm btn-circle" title="Toggle theme">
+                <svg id="theme-icon-sun" class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clip-rule="evenodd"></path>
+                </svg>
+                <svg id="theme-icon-moon" class="w-5 h-5 hidden" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path>
+                </svg>
+            </button>
+
+            <form hx-post="/logout" hx-target="body" hx-confirm="Are you sure you want to log out?" hx-headers='{"X-CSRF-Token": "{{.CSRFToken}}"}' hx-push-url="true">
+                <button class="btn btn-ghost btn-sm">Logout</button>
             </form>
         </div>
     </div>
@@ -35,7 +45,7 @@
         <h2 class="card-title text-error">DLQ Actions</h2>
         <p class="text-sm opacity-75">Dead Letter Queue contains failed messages that need manual intervention.</p>
         <div class="card-actions justify-end">
-            <button class="btn btn-warning" hx-post="/ui/queue/{{.Data.Queue.Name}}/messages/requeue"
+            <button class="btn btn-warning" hx-post="/queue/{{.Data.Queue.Name}}/messages/requeue"
                     hx-confirm="Are you sure you want to requeue all messages?"
                     hx-headers='{"X-CSRF-Token": "{{.CSRFToken}}"}'>
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="w-4 h-4 stroke-current">
@@ -44,7 +54,7 @@
                 </svg>
                 Requeue All
             </button>
-            <button class="btn btn-error" hx-delete="/ui/queue/{{.Data.Queue.Name}}/messages"
+            <button class="btn btn-error" hx-delete="/queue/{{.Data.Queue.Name}}/messages"
                     hx-confirm="Are you sure you want to permanently delete all messages? This cannot be undone."
                     hx-headers='{"X-CSRF-Token": "{{.CSRFToken}}"}'>
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="w-4 h-4 stroke-current">
@@ -65,7 +75,7 @@
             <h2 class="card-title">Messages</h2>
             <div class="flex gap-2">
                 <button class="btn btn-sm btn-outline" 
-                        hx-get="/ui/queue/{{.Data.Queue.Name}}/messages"
+                        hx-get="/queue/{{.Data.Queue.Name}}/messages"
                         hx-target="#messages-container">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                          class="w-4 h-4 stroke-current">
@@ -79,7 +89,7 @@
 
         <!-- Messages will be loaded here via HTMX (cursor-based) -->
         <div id="messages-container" 
-             hx-get="/ui/queue/{{.Data.Queue.Name}}/messages" 
+             hx-get="/queue/{{.Data.Queue.Name}}/messages"
              hx-trigger="load"
              hx-indicator="#messages-loading">
             <!-- Loading indicator -->

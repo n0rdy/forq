@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en" data-theme="light" id="html-root">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -19,5 +19,44 @@
 </head>
 <body class="min-h-screen bg-base-200">
     {{template "dashboard-content" .}}
+    
+    <script>
+        // Theme management
+        (function() {
+            const htmlRoot = document.getElementById('html-root');
+            const themeToggle = document.getElementById('theme-toggle');
+            const sunIcon = document.getElementById('theme-icon-sun');
+            const moonIcon = document.getElementById('theme-icon-moon');
+            
+            // Get saved theme or default to light
+            const savedTheme = localStorage.getItem('forq-theme') || 'light';
+            
+            // Apply theme on page load
+            function applyTheme(theme) {
+                htmlRoot.setAttribute('data-theme', theme);
+                if (theme === 'dark') {
+                    sunIcon.classList.add('hidden');
+                    moonIcon.classList.remove('hidden');
+                } else {
+                    sunIcon.classList.remove('hidden');
+                    moonIcon.classList.add('hidden');
+                }
+            }
+            
+            // Initialize theme
+            applyTheme(savedTheme);
+            
+            // Handle theme toggle
+            if (themeToggle) {
+                themeToggle.addEventListener('click', function() {
+                    const currentTheme = htmlRoot.getAttribute('data-theme');
+                    const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+                    
+                    applyTheme(newTheme);
+                    localStorage.setItem('forq-theme', newTheme);
+                });
+            }
+        })();
+    </script>
 </body>
 </html>

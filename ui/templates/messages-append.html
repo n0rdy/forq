@@ -1,7 +1,7 @@
 {{range .Data.Messages}}
 <!-- Message metadata row (clickable) -->
 <tr id="message-row-{{.ID}}" class="hover:bg-base-200 cursor-pointer"
-    hx-get="/ui/queue/{{$.Data.QueueName}}/messages/{{.ID}}/details"
+    hx-get="/queue/{{$.Data.QueueName}}/messages/{{.ID}}/details"
     hx-target="#message-details-{{.ID}}"
     hx-trigger="click"
     hx-swap="innerHTML"
@@ -31,13 +31,13 @@
     <td onclick="event.stopPropagation()">
         <div class="flex gap-1">
             <button class="btn btn-warning btn-xs"
-                    hx-post="/ui/queue/{{$.Data.QueueName}}/messages/requeue/{{.ID}}"
+                    hx-post="/queue/{{$.Data.QueueName}}/messages/requeue/{{.ID}}"
                     hx-target="#message-row-{{.ID}}" hx-swap="outerHTML"
                     hx-confirm="Requeue this message?"
                     hx-headers='{"X-CSRF-Token": "{{$.CSRFToken}}"}'>Requeue
             </button>
             <button class="btn btn-error btn-xs"
-                    hx-delete="/ui/queue/{{$.Data.QueueName}}/messages/{{.ID}}"
+                    hx-delete="/queue/{{$.Data.QueueName}}/messages/{{.ID}}"
                     hx-target="#message-row-{{.ID}}" hx-swap="outerHTML"
                     hx-confirm="Delete this message permanently?"
                     hx-headers='{"X-CSRF-Token": "{{$.CSRFToken}}"}'>Delete
@@ -65,7 +65,7 @@
 {{if .Data.HasMore}}
 <tr>
     <td colspan="{{if .Data.IsDLQ}}5{{else}}4{{end}}" class="text-center py-4" 
-        hx-get="/ui/queue/{{.Data.QueueName}}/messages?after={{.Data.NextCursor}}"
+        hx-get="/queue/{{.Data.QueueName}}/messages?after={{.Data.NextCursor}}"
         hx-trigger="revealed"
         hx-target="this"
         hx-swap="outerHTML">

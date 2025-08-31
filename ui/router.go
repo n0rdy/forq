@@ -30,30 +30,28 @@ func NewRouter(messagesService *services.MessagesService, sessionsService *servi
 func (ur *Router) NewRouter() *chi.Mux {
 	router := chi.NewRouter()
 
-	router.Route("/ui", func(r chi.Router) {
-		r.Use(csrfPrevention(ur.csrfErrorHandler, ur.env))
+	router.Use(csrfPrevention(ur.csrfErrorHandler, ur.env))
 
-		// unprotected login routes:
-		r.Get("/login", ur.loginPage)
-		r.Post("/login", ur.processLogin)
+	// unprotected login routes:
+	router.Get("/login", ur.loginPage)
+	router.Post("/login", ur.processLogin)
 
-		// protected routes:
-		r.With(sessionAuth(ur.sessionsService)).
-			Get("/", ur.dashboardPage)
+	// protected routes:
+	router.With(sessionAuth(ur.sessionsService)).
+		Get("/", ur.dashboardPage)
 
-		r.With(sessionAuth(ur.sessionsService)).Post("/logout", ur.processLogout)
+	router.With(sessionAuth(ur.sessionsService)).Post("/logout", ur.processLogout)
 
-		r.Route("/queue/{queue}", func(r chi.Router) {
-			r.Use(sessionAuth(ur.sessionsService)) // session auth for all queue routes
+	router.Route("/queue/{queue}", func(r chi.Router) {
+		r.Use(sessionAuth(ur.sessionsService)) // session auth for all queue routes
 
-			r.Get("/", ur.queueDetailsPage)
-			r.Get("/messages", ur.queueMessages)
-			r.Get("/messages/{messageId}/details", ur.messageDetails)
-			r.Delete("/messages", ur.deleteAllMessages)
-			r.Post("/messages/requeue", ur.requeueAllMessages)
-			r.Delete("/messages/{messageId}", ur.deleteMessage)
-			r.Post("/messages/requeue/{messageId}", ur.requeueMessage)
-		})
+		r.Get("/", ur.queueDetailsPage)
+		r.Get("/messages", ur.queueMessages)
+		r.Get("/messages/{messageId}/details", ur.messageDetails)
+		r.Delete("/messages", ur.deleteAllMessages)
+		r.Post("/messages/requeue", ur.requeueAllMessages)
+		r.Delete("/messages/{messageId}", ur.deleteMessage)
+		r.Post("/messages/requeue/{messageId}", ur.requeueMessage)
 	})
 
 	return router
@@ -102,7 +100,7 @@ func (ur *Router) processLogin(w http.ResponseWriter, req *http.Request) {
 	})
 
 	// redirects to dashboard on successful login
-	w.Header().Set("HX-Redirect", "/ui")
+	w.Header().Set("HX-Redirect", "/")
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -121,7 +119,7 @@ func (ur *Router) processLogout(w http.ResponseWriter, req *http.Request) {
 	})
 
 	// redirects to login page
-	http.Redirect(w, req, "/ui/login", http.StatusFound)
+	http.Redirect(w, req, "/login", http.StatusFound)
 }
 
 func (ur *Router) dashboardPage(w http.ResponseWriter, req *http.Request) {
@@ -206,7 +204,7 @@ func (ur *Router) deleteAllMessages(w http.ResponseWriter, req *http.Request) {
 	}
 	// redirects to dashboard, as most likely the queue is now gone
 	// TODO: consider passing a message via query param to show that the operation was successful
-	w.Header().Set("HX-Redirect", "/ui")
+	w.Header().Set("HX-Redirect", "/")
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -220,7 +218,7 @@ func (ur *Router) requeueAllMessages(w http.ResponseWriter, req *http.Request) {
 	}
 	// redirects to dashboard, as most likely the DLQ is now empty
 	// TODO: consider passing a message via query param to show that the operation was successful
-	w.Header().Set("HX-Redirect", "/ui")
+	w.Header().Set("HX-Redirect", "/")
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -263,5 +261,5 @@ func (ur *Router) csrfErrorHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// For regular requests, redirect to login page
-	http.Redirect(w, r, "/ui/login", http.StatusFound)
+	http.Redirect(w, r, "/login", http.StatusFound)
 }
