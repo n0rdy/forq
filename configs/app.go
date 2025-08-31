@@ -37,7 +37,7 @@ type ServerTimeouts struct {
 	Idle       time.Duration
 }
 
-func NewAppConfig(metricsEnabled bool) *AppConfigs {
+func NewAppConfig(metricsEnabled bool, queueTtlHours, dlqTtlHours int) *AppConfigs {
 	pollingDurationMs := 30 * 1000
 
 	return &AppConfigs{
@@ -45,8 +45,8 @@ func NewAppConfig(metricsEnabled bool) *AppConfigs {
 		MaxProcessAfterDelayMs:     366 * 24 * 60 * 60 * 1000, // 366 days
 		MaxDeliveryAttempts:        5,
 		BackoffDelaysMs:            []int64{1000, 5 * 1000, 15 * 1000, 30 * 1000, 60 * 1000}, // 1s, 5s, 15s, 30s, 60s
-		QueueTtlMs:                 1 * 24 * 60 * 60 * 1000,                                  // 1 day
-		DlqTtlMs:                   7 * 24 * 60 * 60 * 1000,                                  // 7 days
+		QueueTtlMs:                 int64(queueTtlHours) * 60 * 60 * 1000,                    // Convert hours to milliseconds
+		DlqTtlMs:                   int64(dlqTtlHours) * 60 * 60 * 1000,                      // Convert hours to milliseconds
 		PollingDurationMs:          int64(pollingDurationMs),                                 // 30 seconds
 		MaxProcessingTimeMs:        30 * 1000,                                                // 30 seconds
 		MetricsEnabled:             metricsEnabled,

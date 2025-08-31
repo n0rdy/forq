@@ -30,6 +30,7 @@ func main() {
 	env := getEnv()
 	authSecret := getAuthSecret()
 	metricsEnabled, metricsAuthSecret := getMetricsConfigs()
+	queueTtlHours, dlqTtlHours := getTtlConfigs()
 
 	dbPath, err := utils.GetOrCreateDefaultDBPath()
 	if err != nil {
@@ -39,7 +40,7 @@ func main() {
 
 	runMigrations(dbPath)
 
-	appConfigs := configs.NewAppConfig(metricsEnabled)
+	appConfigs := configs.NewAppConfig(metricsEnabled, queueTtlHours, dlqTtlHours)
 
 	repo, err := db.NewSQLiteRepo(dbPath, appConfigs)
 	if err != nil {
@@ -204,6 +205,43 @@ func getMetricsConfigs() (bool, string) {
 		panic("FORQ_METRICS_AUTH_SECRET env var is required when metrics are enabled")
 	}
 	return true, metricsAuthSecret
+}
+
+func getTtlConfigs() (int, int) {
+	queueTtlEnv := os.Getenv("FORQ_QUEUE_TTL_HOURS")
+	dlqTtlEnv := os.Getenv("FORQ_DLQ_TTL_HOURS")
+
+	// Default values
+	queueTtlHours := 24   // 1 day
+	dlqTtlHours := 7 * 24 // 7 days
+
+	if queueTtlEnv != "" {
+		parsed, err := strconv.Atoi(queueTtlEnv)
+		if err != nil {
+			log.Fatal().Err(err).Msg("failed to parse FORQ_QUEUE_TTL_HOURS env var")
+			panic(err)
+		}
+		if parsed < 1 {
+			log.Fatal().Msg("FORQ_QUEUE_TTL_HOURS must be at least 1 hour")
+			panic("FORQ_QUEUE_TTL_HOURS must be at least 1 hour")
+		}
+		queueTtlHours = parsed
+	}
+
+	if dlqTtlEnv != "" {
+		parsed, err := strconv.Atoi(dlqTtlEnv)
+		if err != nil {
+			log.Fatal().Err(err).Msg("failed to parse FORQ_DLQ_TTL_HOURS env var")
+			panic(err)
+		}
+		if parsed < 1 {
+			log.Fatal().Msg("FORQ_DLQ_TTL_HOURS must be at least 1 hour")
+			panic("FORQ_DLQ_TTL_HOURS must be at least 1 hour")
+		}
+		dlqTtlHours = parsed
+	}
+
+	return queueTtlHours, dlqTtlHours
 }
 
 func runMigrations(dbPath string) {
