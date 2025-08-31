@@ -4,7 +4,7 @@ go 1.25
 
 require (
 	github.com/go-chi/chi/v5 v5.2.2
-	github.com/golang-migrate/migrate/v4 v4.18.3
+	github.com/golang-migrate/migrate/v4 v4.19.0
 	github.com/google/uuid v1.6.0
 	github.com/justinas/nosurf v1.2.0
 	github.com/prometheus/client_golang v1.23.0
@@ -27,7 +27,6 @@ require (
 	github.com/prometheus/common v0.65.0 // indirect
 	github.com/prometheus/procfs v0.16.1 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	go.uber.org/atomic v1.11.0 // indirect
 	golang.org/x/exp v0.0.0-20250813145105-42675adae3e6 // indirect
 	golang.org/x/sys v0.35.0 // indirect
 	google.golang.org/protobuf v1.36.6 // indirect
