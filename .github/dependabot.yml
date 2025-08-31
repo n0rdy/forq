@@ -1,5 +1,26 @@
 version: 2
 updates:
+  # Daily security updates
+  - package-ecosystem: "gomod"
+    target-branch: "main"
+    directory: "/"
+    schedule:
+      interval: "daily"
+      time: "12:00"
+      timezone: "Europe/Oslo"
+    assignees:
+      - "n0rdy"
+  - package-ecosystem: "github-actions"
+    target-branch: "main"
+    directory: "/"
+    schedule:
+      interval: "daily"
+      time: "12:00"
+      timezone: "Europe/Oslo"
+    assignees:
+      - "n0rdy"
+
+  # Weekly updates for all packages
   - package-ecosystem: "gomod"
     directory: "/"
     schedule:
