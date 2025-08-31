@@ -281,25 +281,25 @@ func (fr *ForqRepo) UpdateMessageOnConsumingFailure(messageId string, queueName 
 	query := fmt.Sprintf(`
         UPDATE messages 
         SET 
-            attempts = attempts + 1,
             status = CASE 
-            	WHEN attempts + 1 >= ? THEN ?	-- failed if no more attempts left
-            	ELSE ?							-- ready if there are attempts left
+            	WHEN attempts >= ? THEN ?	-- failed if no more attempts left
+            	ELSE ?						-- ready if there are attempts left
 			END,
             process_after = CASE 
                 %s
             END,
             processing_started_at = NULL,
             updated_at = ?
-        WHERE id = ? AND queue = ?;`, fr.processAfterCases(nowMs))
+        WHERE id = ? AND queue = ? AND status = ?;`, fr.processAfterCases(nowMs))
 
 	result, err := fr.dbWrite.ExecContext(ctx, query,
-		fr.appConfigs.MaxDeliveryAttempts, // WHEN attempts + 1 >= ? (status check)
+		fr.appConfigs.MaxDeliveryAttempts, // WHEN attempts = ? (status check)
 		common.FailedStatus,               // THEN ?  		-- failed if no more attempts left
-		common.ReadyStatus,                // ELSE ?			-- ready if there are attempts left
+		common.ReadyStatus,                // ELSE ?		-- ready if there are attempts left
 		nowMs,                             // updated_at = ?
 		messageId,                         // WHERE id = ?
 		queueName,                         // AND queue = ?
+		common.ProcessingStatus,           // AND status = ?
 	)
 
 	if err != nil {
@@ -324,10 +324,9 @@ func (fr *ForqRepo) UpdateStaleMessages(ctx context.Context) (int64, error) {
 	query := fmt.Sprintf(`
         UPDATE messages 
         SET 
-            attempts = attempts + 1,
             status = CASE 
-            	WHEN attempts + 1 >= ? THEN ?	-- failed if no more attempts left
-            	ELSE ?							-- ready if there are attempts left
+            	WHEN attempts  >= ? THEN ?	-- failed if no more attempts left
+            	ELSE ?						-- ready if there are attempts left
 			END,
             process_after = CASE 
                 %s
@@ -337,8 +336,8 @@ func (fr *ForqRepo) UpdateStaleMessages(ctx context.Context) (int64, error) {
         WHERE status = ? AND processing_started_at < ?;`, fr.processAfterCases(nowMs))
 
 	res, err := fr.dbWrite.ExecContext(ctx, query,
-		fr.appConfigs.MaxDeliveryAttempts,       // WHEN attempts + 1 >= ? (status check)
-		common.FailedStatus,                     // THEN ?  			-- failed if no more attempts left
+		fr.appConfigs.MaxDeliveryAttempts,       // WHEN attempts >= ? (status check)
+		common.FailedStatus,                     // THEN ?  		-- failed if no more attempts left
 		common.ReadyStatus,                      // ELSE ?			-- ready if there are attempts left
 		nowMs,                                   // updated_at = ?
 		common.ProcessingStatus,                 // WHERE status = ?
@@ -578,6 +577,33 @@ func (fr *ForqRepo) DeleteMessage(messageId string, queueName string, ctx contex
 
 	if rowsAffected == 0 {
 		log.Warn().Str("queue", queueName).Str("message_id", messageId).Msg("no rows deleted, message was either deleted already or does not exist")
+	}
+	return nil
+}
+
+func (fr *ForqRepo) DeleteMessageOnAck(messageId string, queueName string, ctx context.Context) error {
+	query := `
+		DELETE FROM messages
+		WHERE id = ? AND queue = ? AND status = ?;`
+
+	result, err := fr.dbWrite.ExecContext(ctx, query,
+		messageId,               // WHERE id = ?
+		queueName,               // AND queue = ?
+		common.ProcessingStatus, // AND status = ?
+	)
+	if err != nil {
+		log.Error().Err(err).Str("queue", queueName).Msg("failed to delete message on ack")
+		return common.ErrInternal
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		log.Error().Err(err).Str("queue", queueName).Msg("failed to get rows affected after delete on ack")
+		return common.ErrInternal
+	}
+
+	if rowsAffected == 0 {
+		log.Warn().Str("queue", queueName).Str("message_id", messageId).Msg("no rows deleted on ack, message was either deleted already or does not exist")
 	}
 	return nil
 }

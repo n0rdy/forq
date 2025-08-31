@@ -114,7 +114,7 @@ func (ms *MessagesService) GetMessageForConsuming(queueName string, ctx context.
 }
 
 func (ms *MessagesService) AckMessage(messageId string, queueName string, ctx context.Context) error {
-	err := ms.forqRepo.DeleteMessage(messageId, queueName, ctx)
+	err := ms.forqRepo.DeleteMessageOnAck(messageId, queueName, ctx)
 	if err != nil {
 		return err
 	}

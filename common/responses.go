@@ -1,8 +1,8 @@
 package common
 
 type MessageResponse struct {
-	Id      string
-	Content string
+	Id      string `json:"id"`
+	Content string `json:"content"`
 }
 
 type ErrorResponse struct {
