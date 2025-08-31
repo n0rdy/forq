@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"forq/api"
 	"forq/common"
@@ -163,74 +162,48 @@ func main() {
 
 func getEnv() string {
 	env := os.Getenv("FORQ_ENV")
-	if env != "" {
-		if !common.SupportedEnvs[env] {
-			log.Fatal().Msgf("unsupported environment: %s", env)
-			panic(fmt.Sprintf("unsupported environment: %s", env))
-		}
-		return env
+	if env == "" {
+		env = common.ProEnv // Default to production environment
 	}
 
-	var flagEnv string
-	flag.StringVar(&flagEnv, "env", common.ProEnv, "Application environment ("+common.LocalEnv+"|"+common.ProEnv+")")
-	flag.Parse()
-
-	if !common.SupportedEnvs[flagEnv] {
+	if !common.SupportedEnvs[env] {
 		log.Fatal().Msgf("unsupported environment: %s", env)
 		panic(fmt.Sprintf("unsupported environment: %s", env))
 	}
-	return flagEnv
+	return env
 }
 
 func getAuthSecret() string {
 	authSecret := os.Getenv("FORQ_AUTH_SECRET")
-	if authSecret != "" {
-		return authSecret
+	if authSecret == "" {
+		log.Fatal().Msg("auth secret is not provided: set FORQ_AUTH_SECRET environment variable")
+		panic("auth secret is not provided: set FORQ_AUTH_SECRET environment variable")
 	}
-
-	var flagAuthSecret string
-	flag.StringVar(&flagAuthSecret, "auth-secret", "", "Authentication secret")
-	flag.Parse()
-
-	if flagAuthSecret == "" {
-		log.Fatal().Msg("auth secret is not provided: either set FORQ_AUTH_SECRET environment variable or pass it as a command line argument --auth-secret")
-		panic("auth secret is not provided: either set FORQ_AUTH_SECRET environment variable or pass it as a command line argument --auth-secret")
-	}
-	return flagAuthSecret
+	return authSecret
 }
 
 func getMetricsConfigs() (bool, string) {
 	metricsEnabledEnv := os.Getenv("FORQ_METRICS_ENABLED")
-	if metricsEnabledEnv != "" {
-		metricsEnabled, err := strconv.ParseBool(metricsEnabledEnv)
-		if err != nil {
-			log.Fatal().Err(err).Msg("failed to parse FORQ_METRICS_ENABLED env var")
-			panic(err)
-		}
-		if metricsEnabled {
-			metricsAuthSecret := os.Getenv("FORQ_METRICS_AUTH_SECRET")
-			if metricsAuthSecret == "" {
-				log.Fatal().Msg("FORQ_METRICS_AUTH_SECRET env var is required when metrics are enabled")
-				panic("FORQ_METRICS_SECRET env var is required when metrics are enabled")
-			}
-			return true, metricsAuthSecret
-		}
+	if metricsEnabledEnv == "" {
+		return false, "" // Metrics disabled by default
 	}
 
-	var metricsEnabledFlag bool
-	var metricsAuthSecretFlag string
-	flag.BoolVar(&metricsEnabledFlag, "metrics-enabled", false, "Enable metrics endpoint")
-	flag.StringVar(&metricsAuthSecretFlag, "metrics-auth-secret", "", "Metrics endpoint secret (required if metrics are enabled)")
-	flag.Parse()
-
-	if metricsEnabledFlag {
-		if metricsAuthSecretFlag == "" {
-			log.Fatal().Msg("metrics-secret flag is required when metrics are enabled")
-			panic("metrics-secret flag is required when metrics are enabled")
-		}
-		return true, metricsAuthSecretFlag
+	metricsEnabled, err := strconv.ParseBool(metricsEnabledEnv)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to parse FORQ_METRICS_ENABLED env var")
+		panic(err)
 	}
-	return false, ""
+
+	if !metricsEnabled {
+		return false, ""
+	}
+
+	metricsAuthSecret := os.Getenv("FORQ_METRICS_AUTH_SECRET")
+	if metricsAuthSecret == "" {
+		log.Fatal().Msg("FORQ_METRICS_AUTH_SECRET env var is required when metrics are enabled")
+		panic("FORQ_METRICS_AUTH_SECRET env var is required when metrics are enabled")
+	}
+	return true, metricsAuthSecret
 }
 
 func runMigrations(dbPath string) {
