@@ -80,7 +80,7 @@ func main() {
 	// API server protocols - HTTP/2 only
 	var apiProtocols http.Protocols
 	apiProtocols.SetUnencryptedHTTP2(true)
-	apiProtocols.SetHTTP1(false)
+	apiProtocols.SetHTTP1(true)
 
 	apiServer := &http.Server{
 		Addr:              "localhost:8080",
