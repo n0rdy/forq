@@ -1,6 +1,8 @@
 package common
 
 const (
+	DlqSuffix = "-dlq"
+
 	// envs:
 	LocalEnv = "local"
 	ProEnv   = "pro"

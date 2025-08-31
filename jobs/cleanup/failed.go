@@ -3,6 +3,7 @@ package cleanup
 import (
 	"context"
 	"forq/db"
+	"forq/metrics"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -15,7 +16,7 @@ type FailedMessagesCleanupJob struct {
 	done       chan struct{}
 }
 
-func NewFailedMessagesCleanupJob(repo *db.ForqRepo, intervalMs int64) *FailedMessagesCleanupJob {
+func NewFailedMessagesCleanupJob(metricsService metrics.Service, repo *db.ForqRepo, intervalMs int64) *FailedMessagesCleanupJob {
 	ticker := time.NewTicker(time.Duration(intervalMs) * time.Millisecond)
 	done := make(chan struct{})
 
@@ -24,8 +25,11 @@ func NewFailedMessagesCleanupJob(repo *db.ForqRepo, intervalMs int64) *FailedMes
 			select {
 			case <-ticker.C:
 				ctx, cancelFunc := context.WithTimeout(context.Background(), time.Duration(intervalMs-1000)*time.Millisecond)
-				if err := repo.UpdateFailedMessagesForRegularQueues(ctx); err != nil {
-					log.Error().Err(err).Msg("failed to update failed messages for regular queues")
+				rowsAffected, err := repo.UpdateFailedMessagesForRegularQueues(ctx)
+				if err != nil {
+					log.Error().Err(err).Msg("failed to update failed messages for regular queues by FailedMessagesCleanupJob")
+				} else {
+					metricsService.IncMessagesMovedToDlqTotalBy(rowsAffected, metrics.FailedMovedToDlqReason)
 				}
 				cancelFunc()
 			case <-done:
@@ -35,10 +39,8 @@ func NewFailedMessagesCleanupJob(repo *db.ForqRepo, intervalMs int64) *FailedMes
 	}()
 
 	return &FailedMessagesCleanupJob{
-		repo:       repo,
-		intervalMs: intervalMs,
-		ticker:     ticker,
-		done:       done,
+		ticker: ticker,
+		done:   done,
 	}
 }
 

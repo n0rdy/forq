@@ -20,13 +20,13 @@ func init() {
 	}
 }
 
-func bearerTokenAuth(authSecret string) func(http.Handler) http.Handler {
-	expectedHeader := "Bearer " + authSecret
+func apiKeyTokenAuth(authSecret string) func(http.Handler) http.Handler {
+	expectedHeader := "ApiKey " + authSecret
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			authHeader := req.Header.Get("Authorization")
 			if authHeader != expectedHeader {
-				log.Error().Msg("Invalid bearer token")
+				log.Error().Msg("Invalid API key")
 				sendUnauthorizedErrorResponse(w)
 				return
 			}

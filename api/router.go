@@ -8,18 +8,23 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog/log"
 )
 
 type Router struct {
-	messagesService *services.MessagesService
-	authSecret      string
+	messagesService   *services.MessagesService
+	authSecret        string
+	metricsEnabled    bool
+	metricsAuthSecret string
 }
 
-func NewRouter(messagesService *services.MessagesService, authSecret string) *Router {
+func NewRouter(messagesService *services.MessagesService, authSecret string, metricsEnabled bool, metricsAuthSecret string) *Router {
 	return &Router{
-		messagesService: messagesService,
-		authSecret:      authSecret,
+		messagesService:   messagesService,
+		authSecret:        authSecret,
+		metricsEnabled:    metricsEnabled,
+		metricsAuthSecret: metricsAuthSecret,
 	}
 }
 
@@ -28,13 +33,21 @@ func (ar *Router) NewRouter() *chi.Mux {
 
 	router.Get("/healthcheck", ar.healthcheck)
 
+	if ar.metricsEnabled {
+		router.Route("/metrics", func(r chi.Router) {
+			r.Use(apiKeyTokenAuth(ar.metricsAuthSecret))
+
+			r.Get("/", promhttp.Handler().ServeHTTP)
+		})
+	}
+
 	router.Route("/api/v1", func(r chi.Router) {
-		r.Use(bearerTokenAuth(ar.authSecret))
+		r.Use(apiKeyTokenAuth(ar.authSecret))
 
 		r.Route("/queues", func(r chi.Router) {
 			r.Route("/{queue}/messages", func(r chi.Router) {
-				r.Post("/", ar.sendMessage)
-				r.Get("/", ar.fetchMessage)
+				r.Post("/", ar.produceMessage)
+				r.Get("/", ar.consumeMessage)
 
 				r.Route("/{messageId}", func(r chi.Router) {
 					r.Post("/ack", ar.ackMessage)
@@ -47,7 +60,7 @@ func (ar *Router) NewRouter() *chi.Mux {
 	return router
 }
 
-func (ar *Router) sendMessage(w http.ResponseWriter, req *http.Request) {
+func (ar *Router) produceMessage(w http.ResponseWriter, req *http.Request) {
 	var newMessage common.NewMessageRequest
 	err := json.NewDecoder(req.Body).Decode(&newMessage)
 	if err != nil {
@@ -66,7 +79,7 @@ func (ar *Router) sendMessage(w http.ResponseWriter, req *http.Request) {
 	ar.sendNoContentEmptyResponse(w)
 }
 
-func (ar *Router) fetchMessage(w http.ResponseWriter, req *http.Request) {
+func (ar *Router) consumeMessage(w http.ResponseWriter, req *http.Request) {
 	queueName := chi.URLParam(req, "queue")
 
 	message, err := ar.messagesService.GetMessageForConsuming(queueName, req.Context())

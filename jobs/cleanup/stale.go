@@ -3,6 +3,7 @@ package cleanup
 import (
 	"context"
 	"forq/db"
+	"forq/metrics"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -15,7 +16,7 @@ type StaleMessagesCleanupJob struct {
 	done       chan struct{}
 }
 
-func NewStaleMessagesCleanupJob(repo *db.ForqRepo, intervalMs int64) *StaleMessagesCleanupJob {
+func NewStaleMessagesCleanupJob(metricsService metrics.Service, repo *db.ForqRepo, intervalMs int64) *StaleMessagesCleanupJob {
 	ticker := time.NewTicker(time.Duration(intervalMs) * time.Millisecond)
 	done := make(chan struct{})
 
@@ -24,8 +25,11 @@ func NewStaleMessagesCleanupJob(repo *db.ForqRepo, intervalMs int64) *StaleMessa
 			select {
 			case <-ticker.C:
 				ctx, cancelFunc := context.WithTimeout(context.Background(), time.Duration(intervalMs-1000)*time.Millisecond)
-				if err := repo.UpdateStaleMessages(ctx); err != nil {
-					log.Error().Err(err).Msg("failed to update stale messages")
+				rowsAffected, err := repo.UpdateStaleMessages(ctx)
+				if err != nil {
+					log.Error().Err(err).Msg("failed to update stale messages by StaleMessagesCleanupJob")
+				} else {
+					metricsService.IncMessagesStaleRecoveredTotalBy(rowsAffected)
 				}
 				cancelFunc()
 			case <-done:
@@ -35,10 +39,8 @@ func NewStaleMessagesCleanupJob(repo *db.ForqRepo, intervalMs int64) *StaleMessa
 	}()
 
 	return &StaleMessagesCleanupJob{
-		repo:       repo,
-		intervalMs: intervalMs,
-		ticker:     ticker,
-		done:       done,
+		ticker: ticker,
+		done:   done,
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"forq/common"
 	"forq/configs"
 	"forq/db"
+	"forq/metrics"
 	"strings"
 	"time"
 
@@ -18,19 +19,20 @@ const (
 )
 
 type MessagesService struct {
-	forqRepo   *db.ForqRepo
-	appConfigs *configs.AppConfigs
+	metricsService metrics.Service
+	forqRepo       *db.ForqRepo
+	appConfigs     *configs.AppConfigs
 }
 
-func NewMessagesService(forqRepo *db.ForqRepo, appConfigs *configs.AppConfigs) *MessagesService {
+func NewMessagesService(metricsService metrics.Service, forqRepo *db.ForqRepo, appConfigs *configs.AppConfigs) *MessagesService {
 	return &MessagesService{
-		forqRepo:   forqRepo,
-		appConfigs: appConfigs,
+		metricsService: metricsService,
+		forqRepo:       forqRepo,
+		appConfigs:     appConfigs,
 	}
 }
 
 func (ms *MessagesService) ProcessNewMessage(newMessage common.NewMessageRequest, queueName string, ctx context.Context) error {
-	// TODO: think whether we should allow sending empty messages
 	if len(newMessage.Content) > ms.appConfigs.MessageContentMaxSizeBytes {
 		log.Error().Int("size", len(newMessage.Content)).Msg("message content exceeds limit")
 		return common.ErrBadRequestContentExceedsLimit
@@ -73,6 +75,7 @@ func (ms *MessagesService) ProcessNewMessage(newMessage common.NewMessageRequest
 	if err != nil {
 		return err
 	}
+	ms.metricsService.IncMessagesProducedTotalBy(1, queueName)
 	return nil
 }
 
@@ -87,6 +90,7 @@ func (ms *MessagesService) GetMessageForConsuming(queueName string, ctx context.
 			return nil, err
 		}
 		if message != nil {
+			ms.metricsService.IncMessagesConsumedTotalBy(1, queueName)
 			return &common.MessageResponse{
 				Id:      message.Id,
 				Content: message.Content,
@@ -110,53 +114,87 @@ func (ms *MessagesService) GetMessageForConsuming(queueName string, ctx context.
 }
 
 func (ms *MessagesService) AckMessage(messageId string, queueName string, ctx context.Context) error {
-	return ms.forqRepo.DeleteMessage(messageId, queueName, ctx)
+	err := ms.forqRepo.DeleteMessage(messageId, queueName, ctx)
+	if err != nil {
+		return err
+	}
+	ms.metricsService.IncMessagesAckedTotalBy(1, queueName)
+	return nil
 }
 
 func (ms *MessagesService) NackMessage(messageId string, queueName string, ctx context.Context) error {
-	return ms.forqRepo.UpdateMessageOnConsumingFailure(messageId, queueName, ctx)
+	err := ms.forqRepo.UpdateMessageOnConsumingFailure(messageId, queueName, ctx)
+	if err != nil {
+		return err
+	}
+	ms.metricsService.IncMessagesNackedTotalBy(1, queueName)
+	return nil
 }
 
 func (ms *MessagesService) RequeueAllDlqMessages(queueName string, ctx context.Context) error {
-	if !strings.HasSuffix(queueName, "-dlq") {
+	if !strings.HasSuffix(queueName, common.DlqSuffix) {
 		log.Error().Str("queue", queueName).Msg("attempt to requeue non-DLQ queue: only DLQ queues are supported for requeueing")
 		return common.ErrBadRequestDlqOnlyOp
 	}
-	return ms.forqRepo.RequeueDlqMessages(queueName, ctx)
+
+	rowsAffected, err := ms.forqRepo.RequeueDlqMessages(queueName, ctx)
+	if err != nil {
+		return err
+	}
+	ms.metricsService.IncMessagesRequeuedTotalBy(rowsAffected, queueName)
+	return nil
 }
 
 func (ms *MessagesService) RequeueDlqMessage(messageId string, queueName string, ctx context.Context) error {
-	if !strings.HasSuffix(queueName, "-dlq") {
+	if !strings.HasSuffix(queueName, common.DlqSuffix) {
 		log.Error().Str("queue", queueName).Msg("attempt to requeue non-DLQ queue: only DLQ queues are supported for requeueing")
 		return common.ErrBadRequestDlqOnlyOp
 	}
-	return ms.forqRepo.RequeueDlqMessage(messageId, queueName, ctx)
+
+	err := ms.forqRepo.RequeueDlqMessage(messageId, queueName, ctx)
+	if err != nil {
+		return err
+	}
+	ms.metricsService.IncMessagesRequeuedTotalBy(1, queueName)
+	return nil
 }
 
 func (ms *MessagesService) DeleteAllDlqMessages(queueName string, ctx context.Context) error {
-	if !strings.HasSuffix(queueName, "-dlq") {
+	if !strings.HasSuffix(queueName, common.DlqSuffix) {
 		log.Error().Str("queue", queueName).Msg("attempt to delete non-DLQ queue: only DLQ queues are supported for deleting all messages")
 		return common.ErrBadRequestDlqOnlyOp
 	}
-	return ms.forqRepo.DeleteAllMessagesFromQueue(queueName, ctx)
+
+	rowsAffected, err := ms.forqRepo.DeleteAllMessagesFromQueue(queueName, ctx)
+	if err != nil {
+		return err
+	}
+	ms.metricsService.IncMessagesCleanupTotalBy(rowsAffected, metrics.DeletedByUserCleanupReason)
+	return nil
 }
 
 func (ms *MessagesService) DeleteDlqMessage(messageId string, queueName string, ctx context.Context) error {
-	if !strings.HasSuffix(queueName, "-dlq") {
+	if !strings.HasSuffix(queueName, common.DlqSuffix) {
 		log.Error().Str("queue", queueName).Msg("attempt to delete non-DLQ queue: only DLQ queues are supported for deleting messages")
 		return common.ErrBadRequestDlqOnlyOp
 	}
-	return ms.forqRepo.DeleteMessage(messageId, queueName, ctx)
+
+	err := ms.forqRepo.DeleteMessage(messageId, queueName, ctx)
+	if err != nil {
+		return err
+	}
+	ms.metricsService.IncMessagesCleanupTotalBy(1, metrics.DeletedByUserCleanupReason)
+	return nil
 }
 
 func (ms *MessagesService) GetMessagesForUI(queueName string, cursor string, limit int, ctx context.Context) (*common.MessagesComponentData, error) {
-	// Fetch limit+1 to check if there are more messages
+	// fetches limit+1 to check if there are more messages
 	dbMessages, err := ms.forqRepo.SelectMessagesForUI(queueName, cursor, limit+1, ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	// Check if there are more messages and determine pagination
+	// checks if there are more messages and determine pagination
 	var hasMore bool
 	var messages []common.MessageMetadata
 	if len(dbMessages) > limit {
@@ -167,14 +205,14 @@ func (ms *MessagesService) GetMessagesForUI(queueName string, cursor string, lim
 		messages = ms.convertToMessageMetadata(dbMessages)
 	}
 
-	// Determine next cursor (last message ID)
+	// determines next cursor (last message ID)
 	var nextCursor string
 	if hasMore && len(messages) > 0 {
 		nextCursor = messages[len(messages)-1].ID
 	}
 
-	// Determine if this is a DLQ queue
-	isDLQ := strings.HasSuffix(queueName, "-dlq")
+	// determines if this is a DLQ queue
+	isDLQ := strings.HasSuffix(queueName, common.DlqSuffix)
 
 	return &common.MessagesComponentData{
 		Messages:   messages,

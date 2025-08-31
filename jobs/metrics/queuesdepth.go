@@ -1,4 +1,4 @@
-package cleanup
+package metrics
 
 import (
 	"context"
@@ -9,12 +9,12 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-type ExpiredMessagesCleanupJob struct {
+type QueuesDepthMetricsJob struct {
 	ticker *time.Ticker
 	done   chan struct{}
 }
 
-func NewExpiredMessagesCleanupJob(metricsService metrics.Service, repo *db.ForqRepo, intervalMs int64) *ExpiredMessagesCleanupJob {
+func NewQueuesDepthMetricsJob(metricsService metrics.Service, repo *db.ForqRepo, intervalMs int64) *QueuesDepthMetricsJob {
 	ticker := time.NewTicker(time.Duration(intervalMs) * time.Millisecond)
 	done := make(chan struct{})
 
@@ -23,11 +23,13 @@ func NewExpiredMessagesCleanupJob(metricsService metrics.Service, repo *db.ForqR
 			select {
 			case <-ticker.C:
 				ctx, cancelFunc := context.WithTimeout(context.Background(), time.Duration(intervalMs-1000)*time.Millisecond)
-				rowsAffected, err := repo.UpdateExpiredMessagesForRegularQueues(ctx)
+				queuesStats, err := repo.SelectAllQueuesWithStats(ctx)
 				if err != nil {
-					log.Error().Err(err).Msg("failed to update expired messages by ExpiredMessagesCleanupJob")
+					log.Error().Err(err).Msg("failed to fetch queues stats by QueuesDepthMetricsJob")
 				} else {
-					metricsService.IncMessagesMovedToDlqTotalBy(rowsAffected, metrics.ExpiredMovedToDlqReason)
+					for _, qs := range queuesStats {
+						metricsService.SetQueueDepth(qs.Name, int64(qs.MessagesCount))
+					}
 				}
 				cancelFunc()
 			case <-done:
@@ -36,13 +38,13 @@ func NewExpiredMessagesCleanupJob(metricsService metrics.Service, repo *db.ForqR
 		}
 	}()
 
-	return &ExpiredMessagesCleanupJob{
+	return &QueuesDepthMetricsJob{
 		ticker: ticker,
 		done:   done,
 	}
 }
 
-func (j *ExpiredMessagesCleanupJob) Close() error {
+func (j *QueuesDepthMetricsJob) Close() error {
 	j.ticker.Stop()
 	close(j.done)
 	return nil

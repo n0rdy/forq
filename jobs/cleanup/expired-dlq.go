@@ -3,19 +3,18 @@ package cleanup
 import (
 	"context"
 	"forq/db"
+	"forq/metrics"
 	"time"
 
 	"github.com/rs/zerolog/log"
 )
 
 type ExpiredDlqMessagesCleanupJob struct {
-	repo       *db.ForqRepo
-	intervalMs int64
-	ticker     *time.Ticker
-	done       chan struct{}
+	ticker *time.Ticker
+	done   chan struct{}
 }
 
-func NewExpiredDlqMessagesCleanupJob(repo *db.ForqRepo, intervalMs int64) *ExpiredDlqMessagesCleanupJob {
+func NewExpiredDlqMessagesCleanupJob(metricsService metrics.Service, repo *db.ForqRepo, intervalMs int64) *ExpiredDlqMessagesCleanupJob {
 	ticker := time.NewTicker(time.Duration(intervalMs) * time.Millisecond)
 	done := make(chan struct{})
 
@@ -24,8 +23,11 @@ func NewExpiredDlqMessagesCleanupJob(repo *db.ForqRepo, intervalMs int64) *Expir
 			select {
 			case <-ticker.C:
 				ctx, cancelFunc := context.WithTimeout(context.Background(), time.Duration(intervalMs-1000)*time.Millisecond)
-				if err := repo.DeleteExpiredMessagesFromDlq(ctx); err != nil {
-					log.Error().Err(err).Msg("failed to delete expired DLQ messages")
+				rowsAffected, err := repo.DeleteExpiredMessagesFromDlq(ctx)
+				if err != nil {
+					log.Error().Err(err).Msg("failed to delete expired DLQ messages by ExpiredDlqMessagesCleanupJob")
+				} else {
+					metricsService.IncMessagesCleanupTotalBy(rowsAffected, metrics.ExpiredCleanupReason)
 				}
 				cancelFunc()
 			case <-done:
@@ -35,10 +37,8 @@ func NewExpiredDlqMessagesCleanupJob(repo *db.ForqRepo, intervalMs int64) *Expir
 	}()
 
 	return &ExpiredDlqMessagesCleanupJob{
-		repo:       repo,
-		intervalMs: intervalMs,
-		ticker:     ticker,
-		done:       done,
+		ticker: ticker,
+		done:   done,
 	}
 }
 

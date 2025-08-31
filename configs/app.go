@@ -11,6 +11,7 @@ type AppConfigs struct {
 	DlqTtlMs                   int64
 	PollingDurationMs          int64 // Duration for which the queue is polled for new messages via HTTP2 long-polling
 	MaxProcessingTimeMs        int64 // Maximum time allowed for processing a message before it is considered stale
+	MetricsEnabled             bool  // Whether to enable metrics collection
 	JobsIntervals              JobsIntervals
 	ServerConfig               ServerConfig // Configuration for the server, including timeouts
 }
@@ -21,6 +22,7 @@ type JobsIntervals struct {
 	FailedMessagesCleanupMs     int64 // Interval for cleaning up failed messages from the regular queue
 	FailedDqlMessagesCleanupMs  int64 // Interval for cleaning up failed messages from the DLQ
 	StaleMessagesCleanupMs      int64 // Interval for cleaning up stale messages from the regular queue and DLQ
+	QueuesDepthMetricsMs        int64 // Interval for collecting queue depth metrics
 }
 
 type ServerConfig struct {
@@ -35,7 +37,7 @@ type ServerTimeouts struct {
 	Idle       time.Duration
 }
 
-func NewAppConfig() *AppConfigs {
+func NewAppConfig(metricsEnabled bool) *AppConfigs {
 	pollingDurationMs := 30 * 1000
 
 	return &AppConfigs{
@@ -47,12 +49,14 @@ func NewAppConfig() *AppConfigs {
 		DlqTtlMs:                   7 * 24 * 60 * 60 * 1000,                                  // 7 days
 		PollingDurationMs:          int64(pollingDurationMs),                                 // 30 seconds
 		MaxProcessingTimeMs:        30 * 1000,                                                // 30 seconds
+		MetricsEnabled:             metricsEnabled,
 		JobsIntervals: JobsIntervals{
 			ExpiredMessagesCleanupMs:    5 * 60 * 1000, // 5 minutes
 			ExpiredDlqMessagesCleanupMs: 5 * 60 * 1000, // 5 minutes
 			FailedMessagesCleanupMs:     2 * 60 * 1000, // 2 minutes
 			FailedDqlMessagesCleanupMs:  5 * 60 * 1000, // 5 minutes
 			StaleMessagesCleanupMs:      1 * 60 * 1000, // 1 minute
+			QueuesDepthMetricsMs:        30 * 1000,     // 30 seconds
 		},
 		ServerConfig: ServerConfig{
 			Timeouts: ServerTimeouts{

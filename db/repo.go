@@ -318,7 +318,7 @@ func (fr *ForqRepo) UpdateMessageOnConsumingFailure(messageId string, queueName 
 	return nil
 }
 
-func (fr *ForqRepo) UpdateStaleMessages(ctx context.Context) error {
+func (fr *ForqRepo) UpdateStaleMessages(ctx context.Context) (int64, error) {
 	nowMs := time.Now().UnixMilli()
 
 	query := fmt.Sprintf(`
@@ -336,7 +336,7 @@ func (fr *ForqRepo) UpdateStaleMessages(ctx context.Context) error {
             updated_at = ?
         WHERE status = ? AND processing_started_at < ?;`, fr.processAfterCases(nowMs))
 
-	_, err := fr.dbWrite.ExecContext(ctx, query,
+	res, err := fr.dbWrite.ExecContext(ctx, query,
 		fr.appConfigs.MaxDeliveryAttempts,       // WHEN attempts + 1 >= ? (status check)
 		common.FailedStatus,                     // THEN ?  			-- failed if no more attempts left
 		common.ReadyStatus,                      // ELSE ?			-- ready if there are attempts left
@@ -344,10 +344,23 @@ func (fr *ForqRepo) UpdateStaleMessages(ctx context.Context) error {
 		common.ProcessingStatus,                 // WHERE status = ?
 		nowMs-fr.appConfigs.MaxProcessingTimeMs, // AND processing_started_at < ?;
 	)
-	return err
+	if err != nil {
+		log.Error().Err(err).Msg("failed to update stale messages")
+		return 0, common.ErrInternal
+	}
+	if res == nil {
+		return 0, nil
+	}
+
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		log.Error().Err(err).Msg("failed to get rows affected after updating stale messages")
+		return 0, common.ErrInternal
+	}
+	return rowsAffected, nil
 }
 
-func (fr *ForqRepo) UpdateFailedMessagesForRegularQueues(ctx context.Context) error {
+func (fr *ForqRepo) UpdateFailedMessagesForRegularQueues(ctx context.Context) (int64, error) {
 	nowMs := time.Now().UnixMilli()
 
 	query := `
@@ -355,7 +368,7 @@ func (fr *ForqRepo) UpdateFailedMessagesForRegularQueues(ctx context.Context) er
         SET
             attempts = 0,
             status = ?,
-            queue = queue || '-dlq',
+            queue = queue || ?,
             is_dlq = TRUE,              -- Set DLQ flag
             process_after = ?,
             processing_started_at = NULL,
@@ -364,18 +377,32 @@ func (fr *ForqRepo) UpdateFailedMessagesForRegularQueues(ctx context.Context) er
             expires_after = ?
         WHERE status = ? AND is_dlq = FALSE;`
 
-	_, err := fr.dbWrite.ExecContext(ctx, query,
+	res, err := fr.dbWrite.ExecContext(ctx, query,
 		common.ReadyStatus,                     // status = ?
+		common.DlqSuffix,                       // queue = queue || ?
 		nowMs,                                  // process_after = ?
 		common.MaxAttemptsReachedFailureReason, // failure_reason = ?
 		nowMs,                                  // updated_at = ?
 		nowMs+fr.appConfigs.DlqTtlMs,           // expires_after = ?
 		common.FailedStatus,                    // WHERE status = ?
 	)
-	return err
+	if err != nil {
+		log.Error().Err(err).Msg("failed to update failed messages for regular queues")
+		return 0, common.ErrInternal
+	}
+	if res == nil {
+		return 0, nil
+	}
+
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		log.Error().Err(err).Msg("failed to get rows affected after updating failed messages for regular queues")
+		return 0, common.ErrInternal
+	}
+	return rowsAffected, nil
 }
 
-func (fr *ForqRepo) UpdateExpiredMessagesForRegularQueues(ctx context.Context) error {
+func (fr *ForqRepo) UpdateExpiredMessagesForRegularQueues(ctx context.Context) (int64, error) {
 	nowMs := time.Now().UnixMilli()
 
 	query := `
@@ -383,7 +410,7 @@ func (fr *ForqRepo) UpdateExpiredMessagesForRegularQueues(ctx context.Context) e
         SET
             attempts = 0,
             status = ?,
-            queue = queue || '-dlq',
+            queue = queue || ?,
             is_dlq = TRUE,              -- Set DLQ flag
             process_after = ?,
             processing_started_at = NULL,
@@ -392,8 +419,9 @@ func (fr *ForqRepo) UpdateExpiredMessagesForRegularQueues(ctx context.Context) e
             expires_after = ?
         WHERE status != ? AND expires_after < ? AND is_dlq = FALSE;`
 
-	_, err := fr.dbWrite.ExecContext(ctx, query,
+	res, err := fr.dbWrite.ExecContext(ctx, query,
 		common.ReadyStatus,                 // status = ?
+		common.DlqSuffix,                   // queue = queue || ?
 		nowMs,                              // process_after = ?
 		common.MessageExpiredFailureReason, // failure_reason = ?
 		nowMs,                              // updated_at = ?
@@ -401,12 +429,25 @@ func (fr *ForqRepo) UpdateExpiredMessagesForRegularQueues(ctx context.Context) e
 		common.ProcessingStatus,            // WHERE status != ?
 		nowMs,                              // AND expires_after < ?
 	)
-	return err
+	if err != nil {
+		log.Error().Err(err).Msg("failed to update expired messages for regular queues")
+		return 0, common.ErrInternal
+	}
+	if res == nil {
+		return 0, nil
+	}
+
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		log.Error().Err(err).Msg("failed to get rows affected after updating expired messages for regular queues")
+		return 0, common.ErrInternal
+	}
+	return rowsAffected, nil
 }
 
-func (fr *ForqRepo) RequeueDlqMessages(queueName string, ctx context.Context) error {
+func (fr *ForqRepo) RequeueDlqMessages(queueName string, ctx context.Context) (int64, error) {
 	nowMs := time.Now().UnixMilli()
-	destinationQueueName := strings.TrimSuffix(queueName, "-dlq")
+	destinationQueueName := strings.TrimSuffix(queueName, common.DlqSuffix)
 
 	query := `
 		UPDATE messages
@@ -422,7 +463,7 @@ func (fr *ForqRepo) RequeueDlqMessages(queueName string, ctx context.Context) er
 			expires_after = ?
 		WHERE queue = ? AND status != ?;`
 
-	_, err := fr.dbWrite.ExecContext(ctx, query,
+	res, err := fr.dbWrite.ExecContext(ctx, query,
 		destinationQueueName,           // queue = ? -- Move back to regular queue
 		common.ReadyStatus,             // status = ?
 		nowMs,                          // process_after = ?
@@ -431,12 +472,49 @@ func (fr *ForqRepo) RequeueDlqMessages(queueName string, ctx context.Context) er
 		queueName,                      // WHERE queue = ?
 		common.ProcessingStatus,        // AND status != ?
 	)
-	return err
+	if err != nil {
+		log.Error().Err(err).Str("queue", queueName).Msg("failed to update messages by moving from DLQ to regular")
+		return 0, common.ErrInternal
+	}
+
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		log.Error().Err(err).Str("queue", queueName).Msg("failed to get rows affected after requeueing DLQ messages")
+		return 0, common.ErrInternal
+	}
+	return rowsAffected, nil
+}
+
+func (fr *ForqRepo) DeleteExpiredMessagesFromRegularQueues(ctx context.Context) (int64, error) {
+	nowMs := time.Now().UnixMilli()
+
+	query := `
+		DELETE FROM messages
+		WHERE status != ? AND expires_after < ? AND is_dlq = FALSE;`
+
+	res, err := fr.dbWrite.ExecContext(ctx, query,
+		common.ProcessingStatus, // WHERE status != ?
+		nowMs,                   // expires_after < ?
+	)
+	if err != nil {
+		log.Error().Err(err).Msg("failed to delete expired messages from regular queues")
+		return 0, common.ErrInternal
+	}
+	if res == nil {
+		return 0, nil
+	}
+
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		log.Error().Err(err).Msg("failed to get rows affected after deleting expired messages from regular queues")
+		return 0, common.ErrInternal
+	}
+	return rowsAffected, nil
 }
 
 func (fr *ForqRepo) RequeueDlqMessage(messageId string, queueName string, ctx context.Context) error {
 	nowMs := time.Now().UnixMilli()
-	destinationQueueName := strings.TrimSuffix(queueName, "-dlq")
+	destinationQueueName := strings.TrimSuffix(queueName, common.DlqSuffix)
 
 	query := `
 		UPDATE messages
@@ -504,39 +582,89 @@ func (fr *ForqRepo) DeleteMessage(messageId string, queueName string, ctx contex
 	return nil
 }
 
-func (fr *ForqRepo) DeleteFailedMessagesFromDlq(ctx context.Context) error {
+func (fr *ForqRepo) DeleteFailedMessagesFromDlq(ctx context.Context) (int64, error) {
 	query := `
         DELETE FROM messages
         WHERE status = ? AND is_dlq = TRUE;`
 
-	_, err := fr.dbWrite.ExecContext(ctx, query,
+	res, err := fr.dbWrite.ExecContext(ctx, query,
 		common.FailedStatus, // WHERE status = ?
 	)
-	return err
+	if err != nil {
+		log.Error().Err(err).Msg("failed to delete failed messages from DLQ")
+		return 0, common.ErrInternal
+	}
+	if res == nil {
+		return 0, nil
+	}
+
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		log.Error().Err(err).Msg("failed to get rows affected after deleting failed messages from DLQ")
+		return 0, common.ErrInternal
+	}
+	return rowsAffected, nil
 }
 
-func (fr *ForqRepo) DeleteExpiredMessagesFromDlq(ctx context.Context) error {
+func (fr *ForqRepo) DeleteExpiredMessagesFromDlq(ctx context.Context) (int64, error) {
 	nowMs := time.Now().UnixMilli()
 
 	query := `
         DELETE FROM messages
         WHERE status != ? AND expires_after < ? AND is_dlq = TRUE;`
 
-	_, err := fr.dbWrite.ExecContext(ctx, query,
+	res, err := fr.dbWrite.ExecContext(ctx, query,
 		common.ProcessingStatus, // WHERE status != ?
 		nowMs,                   // expires_after < ?
 	)
-	return err
+
+	if err != nil {
+		log.Error().Err(err).Msg("failed to delete expired messages from DLQ")
+		return 0, common.ErrInternal
+	}
+	if res == nil {
+		return 0, nil
+	}
+
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		log.Error().Err(err).Msg("failed to get rows affected after deleting expired messages from DLQ")
+		return 0, common.ErrInternal
+	}
+	return rowsAffected, nil
 }
 
-func (fr *ForqRepo) DeleteAllMessagesFromQueue(queueName string, ctx context.Context) error {
+func (fr *ForqRepo) DeleteAllMessagesFromQueue(queueName string, ctx context.Context) (int64, error) {
 	query := `
 		DELETE FROM messages
 		WHERE queue = ?;`
 
-	_, err := fr.dbWrite.ExecContext(ctx, query,
+	res, err := fr.dbWrite.ExecContext(ctx, query,
 		queueName, // WHERE queue = ?
 	)
+
+	if err != nil {
+		log.Error().Err(err).Str("queue", queueName).Msg("failed to delete all messages from queue")
+		return 0, common.ErrInternal
+	}
+	if res == nil {
+		return 0, nil
+	}
+
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		log.Error().Err(err).Str("queue", queueName).Msg("failed to get rows affected after deleting all messages from queue")
+		return 0, common.ErrInternal
+	}
+	return rowsAffected, nil
+}
+
+func (fr *ForqRepo) Ping() error {
+	err := fr.dbRead.Ping()
+	if err != nil {
+		return err
+	}
+	err = fr.dbWrite.Ping()
 	return err
 }
 
