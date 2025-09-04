@@ -48,14 +48,14 @@ func NewAppConfig(metricsEnabled bool, queueTtlHours, dlqTtlHours int) *AppConfi
 		QueueTtlMs:                 int64(queueTtlHours) * 60 * 60 * 1000,                    // Convert hours to milliseconds
 		DlqTtlMs:                   int64(dlqTtlHours) * 60 * 60 * 1000,                      // Convert hours to milliseconds
 		PollingDurationMs:          int64(pollingDurationMs),                                 // 30 seconds
-		MaxProcessingTimeMs:        30 * 1000,                                                // 30 seconds
+		MaxProcessingTimeMs:        5 * 60 * 1000,                                            // 5 minutes
 		MetricsEnabled:             metricsEnabled,
 		JobsIntervals: JobsIntervals{
 			ExpiredMessagesCleanupMs:    5 * 60 * 1000, // 5 minutes
 			ExpiredDlqMessagesCleanupMs: 5 * 60 * 1000, // 5 minutes
 			FailedMessagesCleanupMs:     2 * 60 * 1000, // 2 minutes
 			FailedDqlMessagesCleanupMs:  5 * 60 * 1000, // 5 minutes
-			StaleMessagesCleanupMs:      1 * 60 * 1000, // 1 minute
+			StaleMessagesCleanupMs:      2 * 60 * 1000, // 2 minutes
 			QueuesDepthMetricsMs:        30 * 1000,     // 30 seconds
 		},
 		ServerConfig: ServerConfig{
