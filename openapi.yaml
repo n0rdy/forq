@@ -1,0 +1,344 @@
+openapi: 3.0.3
+info:
+  title: Forq API
+  version: 0.0.1
+  description: Forq API
+
+servers:
+  - url: http://localhost:8080
+    description: Local server
+
+tags:
+  - name: Admin
+    description: Endpoints for admin users like health checks and metrics
+  - name: Producer
+    description: Endpoints for producers
+  - name: Consumer
+    description: Endpoints for consumers
+
+paths:
+
+  /healthcheck:
+    get:
+      tags:
+        - Health
+      summary: Check application health
+      description: |
+        Check if the application is healthy.
+        Ideally, this endpoint should not be exposed to the public.
+        
+        Please, note that it is not protected by any authentication mechanism.
+      operationId: healthcheck
+      responses:
+        204:
+          description: Application is healthy
+
+  /metrics:
+    get:
+      tags:
+        - Admin
+      summary: Get application metrics
+      description: |
+        Get application metrics in Prometheus format.
+        This endpoint is available only if the metrics were enabled at startup via the `FORQ_METRICS_ENABLED` env var.
+        
+        Ideally, this endpoint should not be exposed to the public.
+        
+        The endpoint is protected by the ApiKey authentication mechanism. 
+        The auth secret must be provided via the `FORQ_METRICS_AUTH_SECRET` env var at startup.
+        Each request should pass it via the `Authorization` header as `ApiKey <FORQ_METRICS_AUTH_SECRET>`.
+      operationId: getMetrics
+      security:
+        - ApiKeyAuth: [ ]
+      responses:
+        200:
+          description: Application metrics in Prometheus format
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: |
+                  # HELP forq_messages_stale_recovered_total Total number of stale messages recovered
+                  # TYPE forq_messages_stale_recovered_total counter
+                  forq_messages_stale_recovered_total 0
+
+  /api/v1/queues/{queue}/messages:
+    post:
+      tags:
+        - Producer
+      summary: Produce a message to a queue
+      description: |
+        Produce a message to the queue by submitting a JSON payload to the endpoint.
+        The message will be added to the end of the queue.
+        
+        The endpoint is protected by the ApiKey authentication mechanism.
+        The auth secret must be provided via the `FORQ_AUTH_SECRET` env var at startup.
+        Each request should pass it via the `Authorization` header as `ApiKey <FORQ_AUTH_SECRET>`.
+      operationId: produceMessage
+      security:
+        - ApiKeyAuth: [ ]
+      parameters:
+        - $ref: '#/components/parameters/QueuePathParam'
+        - $ref: '#/components/parameters/AuthorizationHeader'
+      requestBody:
+        description: Message to produce
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewMessageRequest'
+      responses:
+        204:
+          description: Message produced successfully
+        400:
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        401:
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    get:
+      tags:
+        - Consumer
+      summary: Fetch a message from a queue for processing
+      description: |
+        Fetch a message from the queue for processing.
+        If there is no message available just yet, the HTTP long-polling will be used to wait for a message to arrive for up to 30 seconds.
+        If no message arrives within that time, a 204 No Content response will be returned.
+        
+        Once a message is fetched, it becomes invisible to other consumers for up to 5 minutes while it is being processed, or until it is unacknowledged.
+        If the message is not acknowledged within that time, it becomes visible to other consumers again.
+        
+        It is important to explicitly acknowledge or unacknowledge the message after processing it!
+        
+        The endpoint is protected by the ApiKey authentication mechanism.
+        The auth secret must be provided via the `FORQ_AUTH_SECRET` env var at startup
+        Each request should pass it via the `Authorization` header as `ApiKey <FORQ_AUTH_SECRET>`.
+      operationId: consumeMessage
+      security:
+        - ApiKeyAuth: [ ]
+      parameters:
+        - $ref: '#/components/parameters/QueuePathParam'
+        - $ref: '#/components/parameters/AuthorizationHeader'
+      responses:
+        200:
+          description: Message fetched successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        204:
+          description: No message available
+        400:
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        401:
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/queues/{queue}/messages/{messageId}/ack:
+    post:
+      tags:
+        - Consumer
+      summary: Acknowledge a message after successful processing
+      description: |
+        Acknowledge a message after successful processing to remove it from the queue permanently.
+        If the message is not found in the DB, it is treated as already acknowledged, 
+        and a 204 No Content response is returned, as for the regular successful acknowledgment.
+        This is to ensure idempotency of the acknowledgment operation.
+        
+        The endpoint is protected by the ApiKey authentication mechanism.
+        The auth secret must be provided via the `FORQ_AUTH_SECRET` env var at startup.
+        Each request should pass it via the `Authorization` header as `ApiKey <FORQ_AUTH_SECRET>`.
+      operationId: acknowledgeMessage
+      security:
+        - ApiKeyAuth: [ ]
+      parameters:
+        - $ref: '#/components/parameters/QueuePathParam'
+        - $ref: '#/components/parameters/MessageIdPathParam'
+        - $ref: '#/components/parameters/AuthorizationHeader'
+      responses:
+        204:
+          description: Message acknowledged successfully
+        400:
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        401:
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/queues/{queue}/messages/{messageId}/nack:
+    post:
+      tags:
+        - Consumer
+      summary: Unacknowledge a message after failed processing
+      description: |
+        Unacknowledge a message after failed processing to make it visible to other consumers after the backoff interval (depends on the number of previous attempts).
+        If the max number of attempts is reached, the message is moved to the dead-letter queue (DLQ), 
+        and should be either consumed from there, or processed manually via the Admin UI.
+        
+        If the message is not found in the DB, a 404 Not Found response is returned.
+        
+        The endpoint is protected by the ApiKey authentication mechanism.
+        The auth secret must be provided via the `FORQ_AUTH_SECRET` env var at startup.
+        Each request should pass it via the `Authorization` header as `ApiKey <FORQ_AUTH_SECRET>`.
+      operationId: unacknowledgeMessage
+      security:
+        - ApiKeyAuth: [ ]
+      parameters:
+        - $ref: '#/components/parameters/QueuePathParam'
+        - $ref: '#/components/parameters/MessageIdPathParam'
+        - $ref: '#/components/parameters/AuthorizationHeader'
+      responses:
+        204:
+          description: Message unacknowledged successfully
+        400:
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        401:
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        404:
+          description: Message not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: |
+        API Key authentication. 
+        Each request should pass it via the `Authorization` header as `ApiKey <AUTH_SECRET>` 
+        where `<AUTH_SECRET>` is the secret set via the corresponding env var at startup.
+
+  parameters:
+    AuthorizationHeader:
+      name: Authorization
+      in: header
+      required: true
+      description: API Key authentication. Each request should pass it via the `Authorization` header as `ApiKey <AUTH_SECRET>` where `<AUTH_SECRET>` is the secret set via the corresponding env var at startup.
+      schema:
+        type: string
+        example: ApiKey my-secret
+
+    MessageIdPathParam:
+      name: messageId
+      in: path
+      required: true
+      description: The unique identifier of the message in the UUID v7 format
+      schema:
+        type: string
+        format: uuid
+        example: "0199164b-4dea-78d9-9b4c-c699d5037962"
+
+    QueuePathParam:
+      name: queue
+      in: path
+      required: true
+      description: The name of the queue
+      schema:
+        type: string
+        example: my-queue
+
+  schemas:
+
+    ErrorResponse:
+      type: object
+      description: Standard error response body
+      required:
+        - code
+      properties:
+        code:
+          type: string
+          description: A machine-readable error code
+          enum:
+            - bad_request.body.content.exceeds_limit
+            - bad_request.body.processAfter.in_past
+            - bad_request.body.processAfter.too_far
+            - bad_request.body.invalid
+            - bad_request.dlq_only_operation
+            - unauthorized
+            - not_found.message
+            - internal
+          example: bad_request.body.content.exceeds_limit
+      example: {
+        "code": "bad_request.body.content.exceeds_limit"
+      }
+
+    MessageResponse:
+      type: object
+      description: Response body for the message that is about to be consumed
+      required:
+        - id
+        - content
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: The unique identifier of the message in the UUID v7 format
+          example: "0199164b-4dea-78d9-9b4c-c699d5037962"
+        content:
+          type: string
+          description: |
+            The content/payload of the message.
+            Will not exceed 256 KB in size.
+          example: "Hello, World!"
+      example: {
+        "id": "0199164b-4dea-78d9-9b4c-c699d5037962",
+        "content": "Hello, World!"
+      }
+
+    NewMessageRequest:
+      type: object
+      description: Request body for producing a new message
+      required:
+        - content
+      properties:
+        content:
+          type: string
+          description: |
+            The content/payload of the message.
+            Must not exceed 256 KB in size.
+          example: "Hello, World!"
+        processAfter:
+          type: integer
+          format: int64
+          description: |
+            Unix timestamp in milliseconds indicating when the message should be processed.
+            If not provided, the message will be available for processing immediately.
+            
+            Must not be in the past, or more than 366 days in the future.
+          example: 1700000000000
+      example: {
+        "content": "Hello, World!",
+        "processAfter": 1700000000000
+      }
