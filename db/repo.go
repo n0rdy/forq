@@ -321,24 +321,23 @@ func (fr *ForqRepo) UpdateMessageOnConsumingFailure(messageId string, queueName 
 func (fr *ForqRepo) UpdateStaleMessages(ctx context.Context) (int64, error) {
 	nowMs := time.Now().UnixMilli()
 
-	query := fmt.Sprintf(`
+	query := `
         UPDATE messages 
         SET 
             status = CASE 
             	WHEN attempts  >= ? THEN ?	-- failed if no more attempts left
             	ELSE ?						-- ready if there are attempts left
 			END,
-            process_after = CASE 
-                %s
-            END,
+            process_after = ?,				-- immediate retry for stale messages (consumer likely crashed)
             processing_started_at = NULL,
             updated_at = ?
-        WHERE status = ? AND processing_started_at < ?;`, fr.processAfterCases(nowMs))
+        WHERE status = ? AND processing_started_at < ?;`
 
 	res, err := fr.dbWrite.ExecContext(ctx, query,
 		fr.appConfigs.MaxDeliveryAttempts,       // WHEN attempts >= ? (status check)
 		common.FailedStatus,                     // THEN ?  		-- failed if no more attempts left
 		common.ReadyStatus,                      // ELSE ?			-- ready if there are attempts left
+		nowMs,                                   // process_after = ? -- immediate retry
 		nowMs,                                   // updated_at = ?
 		common.ProcessingStatus,                 // WHERE status = ?
 		nowMs-fr.appConfigs.MaxProcessingTimeMs, // AND processing_started_at < ?;
