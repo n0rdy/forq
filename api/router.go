@@ -13,14 +13,22 @@ import (
 )
 
 type Router struct {
+	monitoringService *services.MonitoringService
 	messagesService   *services.MessagesService
 	authSecret        string
 	metricsEnabled    bool
 	metricsAuthSecret string
 }
 
-func NewRouter(messagesService *services.MessagesService, authSecret string, metricsEnabled bool, metricsAuthSecret string) *Router {
+func NewRouter(
+	monitoringService *services.MonitoringService,
+	messagesService *services.MessagesService,
+	authSecret string,
+	metricsEnabled bool,
+	metricsAuthSecret string,
+) *Router {
 	return &Router{
+		monitoringService: monitoringService,
 		messagesService:   messagesService,
 		authSecret:        authSecret,
 		metricsEnabled:    metricsEnabled,
@@ -119,7 +127,11 @@ func (ar *Router) nackMessage(w http.ResponseWriter, req *http.Request) {
 }
 
 func (ar *Router) healthcheck(w http.ResponseWriter, req *http.Request) {
-	ar.sendNoContentEmptyResponse(w)
+	if ar.monitoringService.IsHealthy() {
+		ar.sendNoContentEmptyResponse(w)
+	} else {
+		ar.sendErrorResponse(w, http.StatusServiceUnavailable, common.ErrCodeServiceUnhealthy)
+	}
 }
 
 func (ar *Router) sendNoContentEmptyResponse(w http.ResponseWriter) {

@@ -689,8 +689,7 @@ func (fr *ForqRepo) Ping() error {
 	if err != nil {
 		return err
 	}
-	err = fr.dbWrite.Ping()
-	return err
+	return fr.dbWrite.Ping()
 }
 
 func (fr *ForqRepo) Close() error {

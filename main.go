@@ -49,6 +49,7 @@ func main() {
 	}
 	defer repo.Close()
 
+	monirotingService := services.NewMonitoringService(repo)
 	metricsService := metrics.NewMetricsService(metricsEnabled)
 	queuesService := services.NewQueuesService(repo)
 	messagesService := services.NewMessagesService(metricsService, repo, appConfigs)
@@ -75,7 +76,7 @@ func main() {
 	var shutdownOnce sync.Once
 
 	// Create API router (HTTP/2 only)
-	apiRouter := api.NewRouter(messagesService, authSecret, metricsEnabled, metricsAuthSecret)
+	apiRouter := api.NewRouter(monirotingService, messagesService, authSecret, metricsEnabled, metricsAuthSecret)
 
 	// API server protocols - HTTP/2 only
 	var apiProtocols http.Protocols

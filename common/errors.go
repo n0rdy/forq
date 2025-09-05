@@ -8,6 +8,7 @@ const (
 	ErrCodeBadRequestDlqOnlyOp           = "bad_request.dlq_only_operation"
 	ErrCodeUnauthorized                  = "unauthorized"
 	ErrCodeNotFoundMessage               = "not_found.message"
+	ErrCodeServiceUnhealthy              = "forq.unhealthy"
 	ErrCodeInternal                      = "internal"
 )
 
