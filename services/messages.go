@@ -81,7 +81,7 @@ func (ms *MessagesService) ProcessNewMessage(newMessage common.NewMessageRequest
 
 func (ms *MessagesService) GetMessageForConsuming(queueName string, ctx context.Context) (*common.MessageResponse, error) {
 	start := time.Now()
-	ticker := time.NewTicker(100 * time.Millisecond)
+	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 
 	for {
