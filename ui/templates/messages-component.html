@@ -14,7 +14,7 @@
             {{end}}
         </tr>
         </thead>
-        <tbody>
+        <tbody id="messages-tbody">
         {{range .Data.Messages}}
         <!-- Message metadata row (clickable) -->
         <tr id="message-row-{{.ID}}" class="hover:bg-base-200 cursor-pointer"
@@ -80,12 +80,12 @@
         
         <!-- Infinite scroll trigger inside table -->
         {{if .Data.HasMore}}
-        <tr>
+        <tr id="load-more-trigger">
             <td colspan="{{if .Data.IsDLQ}}5{{else}}4{{end}}" class="text-center py-4" 
                 hx-get="/queue/{{.Data.QueueName}}/messages?after={{.Data.NextCursor}}"
                 hx-trigger="revealed"
-                hx-target="this"
-                hx-swap="outerHTML">
+                hx-target="#messages-tbody"
+                hx-swap="beforeend">
                 <div class="flex items-center justify-center gap-2">
                     <div class="loading loading-spinner loading-sm"></div>
                     <span class="text-sm opacity-75">Loading more messages...</span>

@@ -237,7 +237,7 @@ func (fr *ForqRepo) SelectMessagesForUI(queueName string, cursor string, limit i
 			SELECT id, status, attempts, received_at, process_after
 			FROM messages
 			WHERE queue = ?
-			ORDER BY received_at DESC, id DESC
+			ORDER BY id DESC
 			LIMIT ?;`
 		args = []interface{}{queueName, limit}
 	} else {
@@ -246,7 +246,7 @@ func (fr *ForqRepo) SelectMessagesForUI(queueName string, cursor string, limit i
 			SELECT id, status, attempts, received_at, process_after
 			FROM messages
 			WHERE queue = ? AND id < ?
-			ORDER BY received_at DESC, id DESC
+			ORDER BY id DESC
 			LIMIT ?;`
 		args = []interface{}{queueName, cursor, limit}
 	}
