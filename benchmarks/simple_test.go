@@ -57,7 +57,7 @@ func produceMessage(queue, content string) error {
 
 	httpReq, _ := http.NewRequest("POST", forqURL+"/api/v1/queues/"+queue+"/messages", bytes.NewBuffer(body))
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "ApiKey "+authToken)
+	httpReq.Header.Set("X-API-Key", authToken)
 
 	resp, err := benchmarkClient.Do(httpReq)
 	if err != nil {
@@ -73,7 +73,7 @@ func produceMessage(queue, content string) error {
 
 func consumeMessage(queue string) (*MessageResponse, error) {
 	httpReq, _ := http.NewRequest("GET", forqURL+"/api/v1/queues/"+queue+"/messages", nil)
-	httpReq.Header.Set("Authorization", "ApiKey "+authToken)
+	httpReq.Header.Set("X-API-Key", authToken)
 
 	resp, err := benchmarkClient.Do(httpReq)
 	if err != nil {
@@ -101,7 +101,7 @@ func consumeMessage(queue string) (*MessageResponse, error) {
 
 func ackMessage(queue, messageID string) error {
 	httpReq, _ := http.NewRequest("POST", forqURL+"/api/v1/queues/"+queue+"/messages/"+messageID+"/ack", nil)
-	httpReq.Header.Set("Authorization", "ApiKey "+authToken)
+	httpReq.Header.Set("X-API-Key", authToken)
 
 	resp, err := benchmarkClient.Do(httpReq)
 	if err != nil {

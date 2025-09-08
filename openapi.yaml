@@ -46,7 +46,7 @@ paths:
         
         The endpoint is protected by the ApiKey authentication mechanism. 
         The auth secret must be provided via the `FORQ_METRICS_AUTH_SECRET` env var at startup.
-        Each request should pass it via the `Authorization` header as `ApiKey <FORQ_METRICS_AUTH_SECRET>`.
+        Each request should pass it via the `X-API-Key` header as `ApiKey <FORQ_METRICS_AUTH_SECRET>`.
       operationId: getMetrics
       security:
         - ApiKeyAuth: [ ]
@@ -73,13 +73,13 @@ paths:
         
         The endpoint is protected by the ApiKey authentication mechanism.
         The auth secret must be provided via the `FORQ_AUTH_SECRET` env var at startup.
-        Each request should pass it via the `Authorization` header as `ApiKey <FORQ_AUTH_SECRET>`.
+        Each request should pass it via the `X-API-Key` header as `ApiKey <FORQ_AUTH_SECRET>`.
       operationId: produceMessage
       security:
         - ApiKeyAuth: [ ]
       parameters:
         - $ref: '#/components/parameters/QueuePathParam'
-        - $ref: '#/components/parameters/AuthorizationHeader'
+        - $ref: '#/components/parameters/ApiKeyHeader'
       requestBody:
         description: Message to produce
         required: true
@@ -119,13 +119,13 @@ paths:
         
         The endpoint is protected by the ApiKey authentication mechanism.
         The auth secret must be provided via the `FORQ_AUTH_SECRET` env var at startup
-        Each request should pass it via the `Authorization` header as `ApiKey <FORQ_AUTH_SECRET>`.
+        Each request should pass it via the `X-API-Key` header as `ApiKey <FORQ_AUTH_SECRET>`.
       operationId: consumeMessage
       security:
         - ApiKeyAuth: [ ]
       parameters:
         - $ref: '#/components/parameters/QueuePathParam'
-        - $ref: '#/components/parameters/AuthorizationHeader'
+        - $ref: '#/components/parameters/ApiKeyHeader'
       responses:
         200:
           description: Message fetched successfully
@@ -161,14 +161,14 @@ paths:
         
         The endpoint is protected by the ApiKey authentication mechanism.
         The auth secret must be provided via the `FORQ_AUTH_SECRET` env var at startup.
-        Each request should pass it via the `Authorization` header as `ApiKey <FORQ_AUTH_SECRET>`.
+        Each request should pass it via the `X-API-Key` header as `ApiKey <FORQ_AUTH_SECRET>`.
       operationId: acknowledgeMessage
       security:
         - ApiKeyAuth: [ ]
       parameters:
         - $ref: '#/components/parameters/QueuePathParam'
         - $ref: '#/components/parameters/MessageIdPathParam'
-        - $ref: '#/components/parameters/AuthorizationHeader'
+        - $ref: '#/components/parameters/ApiKeyHeader'
       responses:
         204:
           description: Message acknowledged successfully
@@ -199,14 +199,14 @@ paths:
         
         The endpoint is protected by the ApiKey authentication mechanism.
         The auth secret must be provided via the `FORQ_AUTH_SECRET` env var at startup.
-        Each request should pass it via the `Authorization` header as `ApiKey <FORQ_AUTH_SECRET>`.
+        Each request should pass it via the `X-API-Key` header as `ApiKey <FORQ_AUTH_SECRET>`.
       operationId: unacknowledgeMessage
       security:
         - ApiKeyAuth: [ ]
       parameters:
         - $ref: '#/components/parameters/QueuePathParam'
         - $ref: '#/components/parameters/MessageIdPathParam'
-        - $ref: '#/components/parameters/AuthorizationHeader'
+        - $ref: '#/components/parameters/ApiKeyHeader'
       responses:
         204:
           description: Message unacknowledged successfully
@@ -234,21 +234,21 @@ components:
     ApiKeyAuth:
       type: apiKey
       in: header
-      name: Authorization
+      name: X-API-Key
       description: |
         API Key authentication. 
-        Each request should pass it via the `Authorization` header as `ApiKey <AUTH_SECRET>` 
+        Each request should pass it via the `X-API-Key` header as `<AUTH_SECRET>` 
         where `<AUTH_SECRET>` is the secret set via the corresponding env var at startup.
 
   parameters:
-    AuthorizationHeader:
-      name: Authorization
+    ApiKeyHeader:
+      name: X-API-Key
       in: header
       required: true
-      description: API Key authentication. Each request should pass it via the `Authorization` header as `ApiKey <AUTH_SECRET>` where `<AUTH_SECRET>` is the secret set via the corresponding env var at startup.
+      description: API Key authentication. Each request should pass it via the `X-API-Key` header as `<AUTH_SECRET>` where `<AUTH_SECRET>` is the secret set via the corresponding env var at startup.
       schema:
         type: string
-        example: ApiKey my-secret
+        example: my-secret
 
     MessageIdPathParam:
       name: messageId

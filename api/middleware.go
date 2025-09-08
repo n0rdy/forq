@@ -21,11 +21,10 @@ func init() {
 }
 
 func apiKeyTokenAuth(authSecret string) func(http.Handler) http.Handler {
-	expectedHeader := "ApiKey " + authSecret
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			authHeader := req.Header.Get("Authorization")
-			if authHeader != expectedHeader {
+			authHeader := req.Header.Get("X-API-Key")
+			if authHeader != authSecret {
 				log.Error().Msg("Invalid API key")
 				sendUnauthorizedErrorResponse(w)
 				return
