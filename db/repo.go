@@ -84,6 +84,7 @@ func (fr *ForqRepo) InsertMessage(newMessage *NewMessage, ctx context.Context) e
 func (fr *ForqRepo) SelectMessageForConsuming(queueName string, ctx context.Context) (*MessageForConsuming, error) {
 	nowMs := time.Now().UnixMilli()
 
+	// we are ignoring expires_after here for performance boost reasons, as expired messaged are cleanup by the jobs
 	query := `
 		UPDATE messages
         SET
@@ -97,7 +98,6 @@ func (fr *ForqRepo) SelectMessageForConsuming(queueName string, ctx context.Cont
             WHERE queue = ?
               AND status = ?
               AND process_after <= ?
-              AND expires_after > ?
             ORDER BY received_at ASC
             LIMIT 1
         )
@@ -111,7 +111,6 @@ func (fr *ForqRepo) SelectMessageForConsuming(queueName string, ctx context.Cont
 		queueName,               // WHERE queue = ?
 		common.ReadyStatus,      // AND status = ?
 		nowMs,                   // AND process_after <= ?
-		nowMs,                   // AND expires_after > ?
 	).Scan(&msg.Id, &msg.Content)
 
 	if errors.Is(err, sql.ErrNoRows) {

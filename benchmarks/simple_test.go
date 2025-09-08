@@ -115,38 +115,69 @@ func ackMessage(queue, messageID string) error {
 	return nil
 }
 
-// BenchmarkSingleProducerConsumer tests basic throughput with one producer and one consumer
+// BenchmarkSingleProducerConsumer tests concurrent single producer and single consumer with backlog
 func BenchmarkSingleProducerConsumer(b *testing.B) {
 	testMessage := `{"task": "process", "data": {"id": 123, "name": "test"}}`
+
+	// Pre-populate queue with backlog to eliminate long-polling waits
+	backlogSize := b.N
+	for i := 0; i < backlogSize; i++ {
+		err := produceMessage(testQueue, testMessage)
+		if err != nil {
+			b.Fatal("Failed to create backlog:", err)
+		}
+	}
 
 	b.ResetTimer()
 	start := time.Now()
 
-	for i := 0; i < b.N; i++ {
-		// Produce message
-		err := produceMessage(testQueue, testMessage)
-		if err != nil {
-			b.Fatal(err)
-		}
+	var wg sync.WaitGroup
+	var producerErr, consumerErr error
 
-		// Consume message
-		msg, err := consumeMessage(testQueue)
-		if err != nil {
-			b.Fatal(err)
+	// Start producer (produces b.N more messages)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < b.N; i++ {
+			if err := produceMessage(testQueue, testMessage); err != nil {
+				producerErr = err
+				return
+			}
 		}
+	}()
 
-		// Acknowledge message
-		err = ackMessage(testQueue, msg.ID)
-		if err != nil {
-			b.Fatal(err)
+	// Start consumer (consumes b.N messages from backlog + new ones)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < b.N; i++ {
+			msg, err := consumeMessage(testQueue)
+			if err != nil {
+				consumerErr = err
+				return
+			}
+
+			if err := ackMessage(testQueue, msg.ID); err != nil {
+				consumerErr = err
+				return
+			}
 		}
+	}()
+
+	wg.Wait()
+
+	if producerErr != nil {
+		b.Fatal("Producer error:", producerErr)
+	}
+	if consumerErr != nil {
+		b.Fatal("Consumer error:", consumerErr)
 	}
 
 	duration := time.Since(start)
 	throughput := float64(b.N) / duration.Seconds()
 	avgLatency := duration / time.Duration(b.N)
 
-	fmt.Printf("\n=== Single Producer/Consumer ===\n")
+	fmt.Printf("\n=== Single Producer/Consumer (with Backlog) ===\n")
 	fmt.Printf("Messages: %d\n", b.N)
 	fmt.Printf("Duration: %v\n", duration)
 	fmt.Printf("Throughput: %.2f messages/sec\n", throughput)

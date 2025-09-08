@@ -22,7 +22,8 @@ CREATE TABLE messages
 -- Optimized indexes for read/write heavy workload
 CREATE INDEX idx_queue ON messages (queue);
 CREATE INDEX idx_status ON messages (status);
-CREATE INDEX idx_consuming ON messages (queue, status, process_after, expires_after, received_at);
+CREATE INDEX idx_queue_ready_by_received ON messages (queue, received_at) WHERE status = 0;
+CREATE INDEX idx_received_at ON messages (received_at);
 CREATE INDEX idx_processing ON messages (status, processing_started_at) WHERE status = 1;
 CREATE INDEX idx_failed_regular ON messages (status, updated_at) WHERE is_dlq = FALSE AND status = 2;
 CREATE INDEX idx_dlq_operations ON messages (queue, status, expires_after) WHERE is_dlq = TRUE;

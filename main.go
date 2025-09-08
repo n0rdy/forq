@@ -37,6 +37,7 @@ func main() {
 		log.Fatal().Err(err).Msg("failed to get or create default database path")
 		panic(err)
 	}
+	log.Info().Msgf("using database file at: %s", dbPath)
 
 	runMigrations(dbPath)
 
