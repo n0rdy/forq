@@ -48,6 +48,6 @@ updates:
     assignees:
       - "n0rdy"
     groups:
-      gomod:
+      github-actions:
         patterns:
           - "**"
