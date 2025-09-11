@@ -31,6 +31,7 @@ func main() {
 	authSecret := getAuthSecret()
 	metricsEnabled, metricsAuthSecret := getMetricsConfigs()
 	queueTtlHours, dlqTtlHours := getTtlConfigs()
+	apiAddr, uiAddr := getServerAddrs()
 
 	dbPath, err := utils.GetOrCreateDefaultDBPath()
 	if err != nil {
@@ -76,16 +77,14 @@ func main() {
 	shutdownCh := make(chan struct{})
 	var shutdownOnce sync.Once
 
-	// Create API router (HTTP/2 only)
 	apiRouter := api.NewRouter(monirotingService, messagesService, authSecret, metricsEnabled, metricsAuthSecret)
 
-	// API server protocols - HTTP/2 only
 	var apiProtocols http.Protocols
 	apiProtocols.SetUnencryptedHTTP2(true)
 	apiProtocols.SetHTTP1(true)
 
 	apiServer := &http.Server{
-		Addr:              "localhost:8080",
+		Addr:              apiAddr,
 		Handler:           http.TimeoutHandler(apiRouter.NewRouter(), appConfigs.ServerConfig.Timeouts.Handle, "timeout"),
 		WriteTimeout:      appConfigs.ServerConfig.Timeouts.Write,
 		ReadTimeout:       appConfigs.ServerConfig.Timeouts.Read,
@@ -94,16 +93,14 @@ func main() {
 		Protocols:         &apiProtocols,
 	}
 
-	// Create UI router (HTTP/1.1 + HTTP/2)
 	uiRouter := ui.NewRouter(messagesService, sessionsService, queuesService, authSecret, env)
 
-	// UI server protocols - HTTP/1.1 + HTTP/2 for browser compatibility
 	var uiProtocols http.Protocols
 	uiProtocols.SetUnencryptedHTTP2(true)
 	uiProtocols.SetHTTP1(true)
 
 	uiServer := &http.Server{
-		Addr:              "localhost:8081",
+		Addr:              uiAddr,
 		Handler:           http.TimeoutHandler(uiRouter.NewRouter(), appConfigs.ServerConfig.Timeouts.Handle, "timeout"),
 		WriteTimeout:      appConfigs.ServerConfig.Timeouts.Write,
 		ReadTimeout:       appConfigs.ServerConfig.Timeouts.Read,
@@ -114,7 +111,7 @@ func main() {
 
 	// Start API server
 	go func() {
-		log.Info().Msg("Starting API server on :8080 (HTTP/2 only)")
+		log.Info().Msgf("Starting API server on %s (HTTP/2 only)", apiAddr)
 		err := apiServer.ListenAndServe()
 		if err != nil {
 			shutdownOnce.Do(func() { close(shutdownCh) })
@@ -128,7 +125,7 @@ func main() {
 
 	// Start UI server
 	go func() {
-		log.Info().Msg("Starting UI server on :8081 (HTTP/1.1 + HTTP/2)")
+		log.Info().Msgf("Starting UI server on %s (HTTP/1.1 + HTTP/2)", uiAddr)
 		err := uiServer.ListenAndServe()
 		if err != nil {
 			shutdownOnce.Do(func() { close(shutdownCh) })
@@ -244,6 +241,20 @@ func getTtlConfigs() (int, int) {
 	}
 
 	return queueTtlHours, dlqTtlHours
+}
+
+func getServerAddrs() (string, string) {
+	apiAddr := os.Getenv("FORQ_API_ADDR")
+	if apiAddr == "" {
+		apiAddr = "localhost:8080" // safe default localhost only
+	}
+
+	uiAddr := os.Getenv("FORQ_UI_ADDR")
+	if uiAddr == "" {
+		uiAddr = "localhost:8081" // safe default localhost only
+	}
+
+	return apiAddr, uiAddr
 }
 
 func runMigrations(dbPath string) {
