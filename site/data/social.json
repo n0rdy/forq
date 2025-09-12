@@ -1,0 +1,24 @@
+{
+  "main": [
+    {
+      "name": "github",
+      "icon": "fab fa-github",
+      "link": "https://github.com/n0rdy"
+    },
+    {
+      "name": "twitter",
+      "icon": "fab fa-x-twitter",
+      "link": "https://x.com/_n0rdy_"
+    },
+    {
+      "name": "bluesky",
+      "icon": "fab fa-bluesky",
+      "link": "https://bsky.app/profile/n0rdy.foo"
+    },
+    {
+      "name": "mastodon",
+      "icon": "fab fa-mastodon",
+      "link": "https://fosstodon.org/@n0rdy"
+    }
+  ]
+}

@@ -23,7 +23,7 @@ type ForqRepo struct {
 
 func NewSQLiteRepo(dbPath string, appConfigs *configs.AppConfigs) (*ForqRepo, error) {
 	// Create read connection with multiple connections for concurrent reads
-	dbRead, err := sql.Open("sqlite", dbPath)
+	dbRead, err := sql.Open("sqlite", applyConnectionSettings(dbPath, false))
 	if err != nil {
 		return nil, err
 	}
@@ -37,7 +37,9 @@ func NewSQLiteRepo(dbPath string, appConfigs *configs.AppConfigs) (*ForqRepo, er
 	}
 
 	// Create write connection with single connection to serialize writes
-	dbWrite, err := sql.Open("sqlite", dbPath)
+	// we are running optimizations pragma ONLY on the write connection, as it might lock the database for a while
+	// and our read flow doesn't expect any locks.
+	dbWrite, err := sql.Open("sqlite", applyConnectionSettings(dbPath, true))
 	if err != nil {
 		dbRead.Close()
 		return nil, err
@@ -57,6 +59,17 @@ func NewSQLiteRepo(dbPath string, appConfigs *configs.AppConfigs) (*ForqRepo, er
 		dbWrite:    dbWrite,
 		appConfigs: appConfigs,
 	}, nil
+}
+
+func applyConnectionSettings(dbPath string, withOptimization bool) string {
+	urlWithSettings := dbPath + "?_pragma=synchronous(NORMAL)&_pragma=temp_store(MEMORY)"
+	if withOptimization {
+		// from SQLite docs:
+		// Applications with long-lived database connections should run "PRAGMA optimize=0x10002" when the database connection first opens,
+		// then run "PRAGMA optimize" again at periodic intervals - perhaps once per day.
+		urlWithSettings += "&_pragma=optimize(0x10002)"
+	}
+	return urlWithSettings
 }
 
 func (fr *ForqRepo) InsertMessage(newMessage *NewMessage, ctx context.Context) error {
@@ -84,7 +97,8 @@ func (fr *ForqRepo) InsertMessage(newMessage *NewMessage, ctx context.Context) e
 func (fr *ForqRepo) SelectMessageForConsuming(queueName string, ctx context.Context) (*MessageForConsuming, error) {
 	nowMs := time.Now().UnixMilli()
 
-	// we are ignoring expires_after here for performance boost reasons, as expired messaged are cleanup by the jobs
+	// we are ignoring expires_after here for performance boost reasons, as expired messaged are cleanup by the jobs.
+	// This query uses COVERING INDEX via `idx_queue_ready_for_consuming`, so it is very fast.
 	query := `
 		UPDATE messages
         SET
@@ -414,7 +428,7 @@ func (fr *ForqRepo) UpdateExpiredMessagesForRegularQueues(ctx context.Context) (
             failure_reason = ?,
             updated_at = ?,
             expires_after = ?
-        WHERE status != ? AND expires_after < ? AND is_dlq = FALSE;`
+        WHERE expires_after < ? AND status != ? AND is_dlq = FALSE;`
 
 	res, err := fr.dbWrite.ExecContext(ctx, query,
 		common.ReadyStatus,                 // status = ?
@@ -423,8 +437,8 @@ func (fr *ForqRepo) UpdateExpiredMessagesForRegularQueues(ctx context.Context) (
 		common.MessageExpiredFailureReason, // failure_reason = ?
 		nowMs,                              // updated_at = ?
 		nowMs+fr.appConfigs.DlqTtlMs,       // expires_after = ?
-		common.ProcessingStatus,            // WHERE status != ?
-		nowMs,                              // AND expires_after < ?
+		nowMs,                              // WHERE expires_after < ?
+		common.ProcessingStatus,            // AND status != ?
 	)
 	if err != nil {
 		log.Error().Err(err).Msg("failed to update expired messages for regular queues")
@@ -689,6 +703,17 @@ func (fr *ForqRepo) Ping() error {
 		return err
 	}
 	return fr.dbWrite.Ping()
+}
+
+func (fr *ForqRepo) Optimize(ctx context.Context) error {
+	// SQLite docs recommend running "PRAGMA optimize;" periodically to optimize the database
+	// https://www.sqlite.org/pragma.html#pragma_optimize
+	_, err := fr.dbWrite.ExecContext(ctx, "PRAGMA optimize;")
+	if err != nil {
+		log.Error().Err(err).Msg("failed to optimize database")
+		return common.ErrInternal
+	}
+	return nil
 }
 
 func (fr *ForqRepo) Close() error {

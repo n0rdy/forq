@@ -23,6 +23,8 @@ type JobsIntervals struct {
 	FailedDqlMessagesCleanupMs  int64 // Interval for cleaning up failed messages from the DLQ
 	StaleMessagesCleanupMs      int64 // Interval for cleaning up stale messages from the regular queue and DLQ
 	QueuesDepthMetricsMs        int64 // Interval for collecting queue depth metrics
+	DbOptimizationMs            int64 // Interval for running PRAGMA optimize on the database
+	DbOptimizationMaxDurationMs int64 // Maximum duration for the PRAGMA optimize operation not to block the DB for too long
 }
 
 type ServerConfig struct {
@@ -57,6 +59,8 @@ func NewAppConfig(metricsEnabled bool, queueTtlHours, dlqTtlHours int) *AppConfi
 			FailedDqlMessagesCleanupMs:  5 * 60 * 1000, // 5 minutes
 			StaleMessagesCleanupMs:      2 * 60 * 1000, // 2 minutes
 			QueuesDepthMetricsMs:        30 * 1000,     // 30 seconds
+			DbOptimizationMs:            1 * 60 * 1000, // 1 hour, as SQLite docs suggest for the apps with long-running connections: https://www.sqlite.org/pragma.html#pragma_optimize
+			DbOptimizationMaxDurationMs: 5 * 1000,      // 5 seconds max duration for PRAGMA optimize
 		},
 		ServerConfig: ServerConfig{
 			Timeouts: ServerTimeouts{

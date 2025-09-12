@@ -1,0 +1,56 @@
+{{/* Custom image partial with high quality processing (q95) for all images */}}
+{{ $image := resources.Get .Src }}
+{{ if $image }}
+  {{/* Handle different display size parameters */}}
+  {{ $sizes := slice }}
+  {{ if .Size }}
+    {{ $sizes = $sizes | append .Size }}
+  {{ end }}
+  {{ if .DisplayXL }}
+    {{ $sizes = $sizes | append .DisplayXL }}
+  {{ end }}
+  {{ if .DisplayLG }}
+    {{ $sizes = $sizes | append .DisplayLG }}
+  {{ end }}
+  {{ if .DisplayMD }}
+    {{ $sizes = $sizes | append .DisplayMD }}
+  {{ end }}
+  
+  {{/* Default size if none specified */}}
+  {{ if not $sizes }}
+    {{ $sizes = $sizes | append "800x" }}
+  {{ end }}
+  
+  {{/* Process image with high quality - same method as banner-override */}}
+  {{ $primarySize := index $sizes 0 }}
+  {{ $processed := $image.Resize (printf "%s webp q95" $primarySize) }}
+  
+  {{/* Generate srcset for responsive images with high quality + retina versions */}}
+  {{ $srcset := slice }}
+  {{ range $sizes }}
+    {{ $responsive := $image.Resize (printf "%s webp q95" .) }}
+    {{ $srcset = $srcset | append (printf "%s %dw" $responsive.RelPermalink $responsive.Width) }}
+    
+    {{/* Generate 2x retina version for crisp text when zoomed */}}
+    {{ $width := int (strings.TrimSuffix "x" .) }}
+    {{ $retina := $image.Resize (printf "%dx webp q95" (mul $width 2)) }}
+    {{ $srcset = $srcset | append (printf "%s %dw" $retina.RelPermalink $retina.Width) }}
+  {{ end }}
+  
+  <img
+    src="{{ $processed.RelPermalink }}"
+    {{ with $srcset }}
+      srcset="{{ delimit . "," }}"
+    {{ end }}
+    alt="{{ .Alt }}"
+    {{ with .Class }}class="{{ . }}"{{ end }}
+    {{ with .Loading }}loading="{{ . }}"{{ end }}
+    width="{{ $processed.Width }}"
+    height="{{ $processed.Height }}"
+  />
+{{ else }}
+  <!-- Fallback for missing image -->
+  <div class="bg-gray-200 {{ .Class }}" style="min-height: 200px;">
+    <p class="text-center pt-20">Image not found: {{ .Src }}</p>
+  </div>
+{{ end }}

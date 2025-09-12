@@ -1,7 +1,5 @@
 -- Enable WAL mode and other optimizations
 PRAGMA journal_mode = WAL; -- Multiple consumers can read messages while new messages are being inserted
-PRAGMA synchronous = NORMAL; -- Safe in WAL mode, much faster than FULL
-PRAGMA busy_timeout = 10000; -- Handle concurrent access gracefully
 
 CREATE TABLE messages
 (
@@ -17,13 +15,12 @@ CREATE TABLE messages
     received_at           INTEGER NOT NULL,               -- Unix milliseconds - When the message was received
     updated_at            INTEGER NOT NULL,               -- Unix milliseconds - Last update timestamp
     expires_after         INTEGER NOT NULL                -- Unix milliseconds - When the message expires and can be deleted
-);
+) WITHOUT ROWID;
+-- WITHOUT ROWID avoids an implicit rowid column, saving space and improving performance.
 
 -- Optimized indexes for read/write heavy workload
-CREATE INDEX idx_queue ON messages (queue);
-CREATE INDEX idx_status ON messages (status);
-CREATE INDEX idx_queue_ready_by_received ON messages (queue, received_at) WHERE status = 0;
-CREATE INDEX idx_received_at ON messages (received_at);
-CREATE INDEX idx_processing ON messages (status, processing_started_at) WHERE status = 1;
+CREATE INDEX idx_queue_ready_for_consuming ON messages (queue, status, received_at, process_after) WHERE status = 0;
+CREATE INDEX idx_for_queue_depth ON messages (queue, is_dlq);
 CREATE INDEX idx_failed_regular ON messages (status, updated_at) WHERE is_dlq = FALSE AND status = 2;
-CREATE INDEX idx_dlq_operations ON messages (queue, status, expires_after) WHERE is_dlq = TRUE;
+CREATE INDEX idx_expires_after ON messages (expires_after);
+CREATE INDEX idx_for_requeueuing ON messages (queue, status);

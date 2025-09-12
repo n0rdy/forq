@@ -1,0 +1,53 @@
+{{/* Override the default banner image processing for better quality with light/dark mode support */}}
+{{/* Check if we have both light and dark banners configured globally */}}
+{{ $globalLightBanner := resources.Get site.Params.banner }}
+{{ $globalDarkBanner := resources.Get site.Params.banner_darkmode }}
+
+{{ if and $globalLightBanner $globalDarkBanner }}
+  {{/* Light mode banner */}}
+  {{ $lightProcessed := $globalLightBanner.Resize "1100x webp q95" }}
+  {{ $light2x := $globalLightBanner.Resize "3200x webp q95" }}
+  <img
+    src="{{ $lightProcessed.RelPermalink }}"
+    srcset="{{ $lightProcessed.RelPermalink }} 1x, {{ $light2x.RelPermalink }} 2x"
+    alt="{{ .Alt }}"
+    class="{{ .Class }} hidden dark:block"
+    {{ with .Loading }}loading="{{ . }}"{{ end }}
+    width="{{ $lightProcessed.Width }}"
+    height="{{ $lightProcessed.Height }}"
+  />
+  
+  {{/* Dark mode banner */}}
+  {{ $darkProcessed := $globalDarkBanner.Resize "1100x webp q95" }}
+  {{ $dark2x := $globalDarkBanner.Resize "3200x webp q95" }}
+  <img
+    src="{{ $darkProcessed.RelPermalink }}"
+    srcset="{{ $darkProcessed.RelPermalink }} 1x, {{ $dark2x.RelPermalink }} 2x"
+    alt="{{ .Alt }}"
+    class="{{ .Class }} dark:hidden"
+    {{ with .Loading }}loading="{{ . }}"{{ end }}
+    width="{{ $darkProcessed.Width }}"
+    height="{{ $darkProcessed.Height }}"
+  />
+{{ else }}
+  {{/* Fallback to original single image behavior */}}
+  {{ $image := resources.Get .Src }}
+  {{ if $image }}
+    {{ $processed := $image.Resize "1600x webp q95" }}
+    {{ $processed2x := $image.Resize "3200x webp q95" }}
+    <img
+      src="{{ $processed.RelPermalink }}"
+      srcset="{{ $processed.RelPermalink }} 1x, {{ $processed2x.RelPermalink }} 2x"
+      alt="{{ .Alt }}"
+      class="{{ .Class }}"
+      {{ with .Loading }}loading="{{ . }}"{{ end }}
+      width="{{ $processed.Width }}"
+      height="{{ $processed.Height }}"
+    />
+  {{ else }}
+    <!-- Fallback for missing image -->
+    <div class="bg-gray-200 {{ .Class }}" style="min-height: 400px;">
+      <p class="text-center pt-48">Image not found: {{ .Src }}</p>
+    </div>
+  {{ end }}
+{{ end }}

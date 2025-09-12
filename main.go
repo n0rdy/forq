@@ -9,6 +9,7 @@ import (
 	"forq/configs"
 	"forq/db"
 	"forq/jobs/cleanup"
+	"forq/jobs/maintenance"
 	metricsJobs "forq/jobs/metrics"
 	"forq/metrics"
 	"forq/services"
@@ -68,6 +69,8 @@ func main() {
 	defer failedDlqMessagesCleanupJob.Close()
 	staleMessagesCleanupJob := cleanup.NewStaleMessagesCleanupJob(metricsService, repo, appConfigs.JobsIntervals.StaleMessagesCleanupMs)
 	defer staleMessagesCleanupJob.Close()
+	dbOptimizationJob := maintenance.NewDbOptimizationJob(repo, appConfigs.JobsIntervals.DbOptimizationMs, appConfigs.JobsIntervals.DbOptimizationMaxDurationMs)
+	defer dbOptimizationJob.Close()
 
 	if metricsEnabled {
 		queuesDepthMetricsJob := metricsJobs.NewQueuesDepthMetricsJob(metricsService, repo, appConfigs.JobsIntervals.QueuesDepthMetricsMs)
@@ -111,7 +114,7 @@ func main() {
 
 	// Start API server
 	go func() {
-		log.Info().Msgf("Starting API server on %s (HTTP/2 only)", apiAddr)
+		log.Info().Msgf("Starting API server on %s", apiAddr)
 		err := apiServer.ListenAndServe()
 		if err != nil {
 			shutdownOnce.Do(func() { close(shutdownCh) })
@@ -125,7 +128,7 @@ func main() {
 
 	// Start UI server
 	go func() {
-		log.Info().Msgf("Starting UI server on %s (HTTP/1.1 + HTTP/2)", uiAddr)
+		log.Info().Msgf("Starting UI server on %s", uiAddr)
 		err := uiServer.ListenAndServe()
 		if err != nil {
 			shutdownOnce.Do(func() { close(shutdownCh) })

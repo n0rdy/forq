@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+>
+  <url>
+    <loc>http://localhost:1316/</loc>
+  </url><url>
+    <loc>http://localhost:1316/categories/</loc>
+  </url><url>
+    <loc>http://localhost:1316/tags/</loc>
+  </url>
+</urlset>
