@@ -4,6 +4,7 @@ import (
 	"html/template"
 	"net/http"
 	"path/filepath"
+	"strings"
 
 	"github.com/justinas/nosurf"
 	"github.com/rs/zerolog/log"
@@ -16,8 +17,9 @@ func init() {
 
 	// Create template with helper functions
 	funcMap := template.FuncMap{
-		"add": func(a, b int) int { return a + b },
-		"sub": func(a, b int) int { return a - b },
+		"add":     func(a, b int) int { return a + b },
+		"sub":     func(a, b int) int { return a - b },
+		"toUpper": strings.ToUpper,
 	}
 
 	templates = template.New("").Funcs(funcMap)
