@@ -1,7 +1,7 @@
 ---
 # Banner
 banner:
-  title: "Forq: a &quot;no PhD required&quot; message queue on top of SQLite"
+  title: "Forq: a simple Message Queue powered by SQLite"
   content: "The missing middle between embedded libraries and enterprise solutions. Great for small to medium workloads of up to a few hundred messages per second."
   image: "/images/banner-light.png"
   button:
@@ -13,7 +13,7 @@ banner:
 features:
   - title: "Simple & Reliable"
     image: "/images/db.png"
-    content: "Built for myself, as I needed a queue that just works without complexity."
+    content: "No PhD required: a queue that just works without complexity."
     bulletpoints:
       - "**Single binary or Docker:** no external dependencies required to run"
       - "**Built with Boring stack:** Go + SQLite + HTMX"

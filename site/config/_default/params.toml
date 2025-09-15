@@ -2,8 +2,8 @@
 # favicon module: https://github.com/gethugothemes/hugo-modules/tree/master/images#favicon-implementation
 favicon = "images/favicon.png"
 # logo module: https://github.com/gethugothemes/hugo-modules/tree/master/images#logo-implementation
-logo = "images/logo.png"
-logo_darkmode = "images/logo-darkmode.png"
+logo = "images/forq-logo-with-text.png"
+logo_darkmode = "images/forq-logo-with-text.png"
 # use `px` or `x` with logo_width, example: "100px".
 # Note: logo_width is not work with .svg file
 logo_width = "160px"
@@ -58,7 +58,7 @@ content = "You must replace the **baseURL** in **hugo.toml** file when deploying
 keywords = ["Queue", "SQLite", "Message Queue", "Forq", "Queue Service"]
 description = "Forq - SQLite Queue Service. The missing middle between embedded libraries and enterprise solutions."
 author = "Myko Nordy"
-image = "images/og-image.png"
+image = "images/og.png"
 
 
 # site verifications
