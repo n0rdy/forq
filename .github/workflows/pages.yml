@@ -41,7 +41,7 @@ jobs:
         working-directory: site
         run: |
           hugo --minify \
-               --baseURL "${{ env.BASE_URL }}/" \
+               --baseURL "${{ env.BASE_URL }}" \
                --destination "${{ github.workspace }}/_site"
 
       # Build docs to _site/docs/
