@@ -7,7 +7,7 @@ banner:
   button:
     enable: true
     label: "View Documentation"
-    link: "/docs/"
+    link: "/documentation-portal"
 
 # Features
 features:
@@ -24,7 +24,7 @@ features:
     button:
       enable: true
       label: "Get Started"
-      link: "/docs/guides/getting-started/"
+      link: "/documentation-portal/guides/getting-started/"
 
   - title: "Production Ready Features"
     image: "/images/benchmarks.png"
@@ -39,7 +39,7 @@ features:
     button:
       enable: true
       label: "View API Docs"
-      link: "/docs/reference/api/"
+      link: "/documentation-portal/reference/api/"
 
   - title: "Developer Experience First"
     image: "/images/apidoc.png"
@@ -54,7 +54,7 @@ features:
     button:
       enable: true
       label: "View OpenAPI Spec"
-      link: "https://github.com/n0rdy/forq/blob/main/openapi.yaml"
+      link: "/documentation-portal/api/"
 
   - title: "But Very Opinionated"
     image: "/images/contributing.png"
@@ -67,6 +67,6 @@ features:
       - "**Open-source, but closed-contribution:** no PRs, please"
     button:
       enable: true
-      label: "More Opinions"
-      link: "/docs/guides/opinions/"
+      label: "Check the Specification"
+      link: "/documentation-portal/guides/specification/"
 ---
