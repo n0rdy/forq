@@ -40,7 +40,7 @@ COPY --from=builder /app/forq .
 
 # Copy runtime assets
 COPY --from=builder /app/db/migrations ./db/migrations
-COPY --from=builder /app/ui/static ./ui/static
+#COPY --from=builder /app/ui/static ./ui/static
 COPY --from=builder /app/ui/templates ./ui/templates
 
 # Change ownership
