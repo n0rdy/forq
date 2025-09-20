@@ -3,7 +3,6 @@
 .DS_Store
 .claude
 
-CLAUDE.md
 CONTEXT.md
 
 test_data_large.sql
