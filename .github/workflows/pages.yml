@@ -22,6 +22,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
 
       - uses: peaceiris/actions-hugo@v3
         with:
@@ -40,7 +42,6 @@ jobs:
       - name: Build landing
         working-directory: site
         run: |
-          hugo mod get
           hugo --minify \
                --baseURL "${{ env.BASE_URL }}" \
                --destination "${{ github.workspace }}/_site"
