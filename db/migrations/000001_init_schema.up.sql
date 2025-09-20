@@ -17,10 +17,10 @@ CREATE TABLE messages
     expires_after         INTEGER NOT NULL                -- Unix milliseconds - When the message expires and can be deleted
 ) WITHOUT ROWID;
 -- WITHOUT ROWID avoids an implicit rowid column, saving space and improving performance.
+-- It is safe to do that as we use UUID v7 (current timestamp-based) as primary key, and they give a good distribution in the underlying B-tree.
 
 -- Optimized indexes for read/write heavy workload
 CREATE INDEX idx_queue_ready_for_consuming ON messages (queue, status, received_at, process_after) WHERE status = 0;
 CREATE INDEX idx_for_queue_depth ON messages (queue, is_dlq);
-CREATE INDEX idx_failed_regular ON messages (status, updated_at) WHERE is_dlq = FALSE AND status = 2;
-CREATE INDEX idx_expires_after ON messages (expires_after);
+CREATE INDEX idx_expired ON messages (status, is_dlq, expires_after);
 CREATE INDEX idx_for_requeueuing ON messages (queue, status);

@@ -1,15 +1,11 @@
 -- drops indexes
-DROP INDEX IF EXISTS idx_queue;
-DROP INDEX IF EXISTS idx_status;
-DROP INDEX IF EXISTS idx_queue_ready_by_received;
-DROP INDEX IF EXISTS idx_received_at;
-DROP INDEX IF EXISTS idx_processing;
-DROP INDEX IF EXISTS idx_failed_regular;
-DROP INDEX IF EXISTS idx_dlq_operations;
+DROP INDEX IF EXISTS idx_queue_ready_for_consuming;
+DROP INDEX IF EXISTS idx_for_queue_depth;
+DROP INDEX IF EXISTS idx_expired;
+DROP INDEX IF EXISTS idx_for_requeueuing;
 
 -- drops tables
 DROP TABLE IF EXISTS messages;
 
 -- resets PRAGMA settings
-PRAGMA journal_mode =
-DELETE;
+PRAGMA journal_mode = DELETE;

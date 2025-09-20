@@ -1,5 +1,5 @@
 title = "Forq Documentation"
-baseurl = "https://forq.sh/docs/"
+baseurl = "https://forq.sh/documentation-portal/"
 
 # Hugo Modules
 [module]

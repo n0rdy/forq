@@ -1,6 +1,7 @@
 .idea
 *.iml
 .DS_Store
+.claude
 
 CLAUDE.md
 CONTEXT.md

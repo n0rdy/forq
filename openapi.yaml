@@ -311,10 +311,10 @@ components:
           description: |
             The content/payload of the message.
             Will not exceed 256 KB in size.
-          example: "Hello, World!"
+          example: "I am going on an adventure!"
       example: {
         "id": "0199164b-4dea-78d9-9b4c-c699d5037962",
-        "content": "Hello, World!"
+        "content": "I am going on an adventure!"
       }
 
     NewMessageRequest:
@@ -328,7 +328,7 @@ components:
           description: |
             The content/payload of the message.
             Must not exceed 256 KB in size.
-          example: "Hello, World!"
+          example: "I am going on an adventure!"
         processAfter:
           type: integer
           format: int64
@@ -339,6 +339,6 @@ components:
             Must not be in the past, or more than 366 days in the future.
           example: 1700000000000
       example: {
-        "content": "Hello, World!",
+        "content": "I am going on an adventure!",
         "processAfter": 1700000000000
       }

@@ -53,14 +53,14 @@ func NewAppConfig(metricsEnabled bool, queueTtlHours, dlqTtlHours int) *AppConfi
 		MaxProcessingTimeMs:        5 * 60 * 1000,                                            // 5 minutes
 		MetricsEnabled:             metricsEnabled,
 		JobsIntervals: JobsIntervals{
-			ExpiredMessagesCleanupMs:    5 * 60 * 1000, // 5 minutes
-			ExpiredDlqMessagesCleanupMs: 5 * 60 * 1000, // 5 minutes
-			FailedMessagesCleanupMs:     2 * 60 * 1000, // 2 minutes
-			FailedDqlMessagesCleanupMs:  5 * 60 * 1000, // 5 minutes
-			StaleMessagesCleanupMs:      2 * 60 * 1000, // 2 minutes
-			QueuesDepthMetricsMs:        30 * 1000,     // 30 seconds
-			DbOptimizationMs:            1 * 60 * 1000, // 1 hour, as SQLite docs suggest for the apps with long-running connections: https://www.sqlite.org/pragma.html#pragma_optimize
-			DbOptimizationMaxDurationMs: 5 * 1000,      // 5 seconds max duration for PRAGMA optimize
+			ExpiredMessagesCleanupMs:    5 * 60 * 1000,  // 5 minutes
+			ExpiredDlqMessagesCleanupMs: 62 * 60 * 1000, // 62 minutes (1h2m)
+			FailedMessagesCleanupMs:     6 * 60 * 1000,  // 6 minutes
+			FailedDqlMessagesCleanupMs:  89 * 60 * 1000, // 89 minutes (1h29m)
+			StaleMessagesCleanupMs:      3 * 60 * 1000,  // 3 minutes
+			QueuesDepthMetricsMs:        30 * 1000,      // 30 seconds
+			DbOptimizationMs:            1 * 60 * 1000,  // 1 hour, as SQLite docs suggest for the apps with long-running connections: https://www.sqlite.org/pragma.html#pragma_optimize
+			DbOptimizationMaxDurationMs: 5 * 1000,       // 5 seconds max duration for PRAGMA optimize
 		},
 		ServerConfig: ServerConfig{
 			Timeouts: ServerTimeouts{

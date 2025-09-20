@@ -27,6 +27,10 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+const (
+	minAuthSecretLength = 32
+)
+
 func main() {
 	env := getEnv()
 	authSecret := getAuthSecret()
@@ -182,6 +186,10 @@ func getAuthSecret() string {
 		log.Fatal().Msg("auth secret is not provided: set FORQ_AUTH_SECRET environment variable")
 		panic("auth secret is not provided: set FORQ_AUTH_SECRET environment variable")
 	}
+	if len(authSecret) < minAuthSecretLength {
+		log.Fatal().Msgf("auth secret is too short: must be at least %d characters", minAuthSecretLength)
+		panic(fmt.Sprintf("auth secret is too short: must be at least %d characters", minAuthSecretLength))
+	}
 	return authSecret
 }
 
@@ -205,6 +213,10 @@ func getMetricsConfigs() (bool, string) {
 	if metricsAuthSecret == "" {
 		log.Fatal().Msg("FORQ_METRICS_AUTH_SECRET env var is required when metrics are enabled")
 		panic("FORQ_METRICS_AUTH_SECRET env var is required when metrics are enabled")
+	}
+	if len(metricsAuthSecret) < minAuthSecretLength {
+		log.Fatal().Msgf("metrics auth secret is too short: must be at least %d characters", minAuthSecretLength)
+		panic(fmt.Sprintf("metrics auth secret is too short: must be at least %d characters", minAuthSecretLength))
 	}
 	return true, metricsAuthSecret
 }

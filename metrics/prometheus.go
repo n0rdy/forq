@@ -48,7 +48,7 @@ func newPrometheusMetricsService() *PrometheusMetricsService {
 		messagesNackedTotal: prometheus.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "forq_messages_nacked_total",
-				Help: "Total number of messages not acknowledged by Forq",
+				Help: "Total number of messages nacknowledged by Forq",
 			},
 			[]string{"queue_name", "queue_type"},
 		),

@@ -9,8 +9,8 @@ images: [ ]
 menu:
   docs:
     parent: "reference"
-    identifier: "api-reference"
-weight: 100
+    identifier: "api"
+weight: 200
 toc: true
 ---
 
@@ -19,6 +19,8 @@ toc: true
 
 Complete OpenAPI specification with interactive examples, request/response details, and authentication information.
 {{< /callout >}}
+
+# API TLDR
 
 ## Authentication
 
@@ -43,8 +45,7 @@ POST /api/v1/queues/{queue}/messages
 ```json
 {
   "content": "Your message content (256KB max)",
-  "processAfter": 1757875397418
-  // Optional: delay processing
+  "processAfter": 1757875397418 // Optional: delay processing
 }
 ```
 

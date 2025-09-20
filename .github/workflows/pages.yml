@@ -62,8 +62,8 @@ jobs:
         working-directory: docs
         run: |
           hugo --minify --gc \
-               --baseURL "${{ env.BASE_URL }}/docs/" \
-               --destination "${{ github.workspace }}/_site/docs"
+               --baseURL "${{ env.BASE_URL }}/documentation-portal/" \
+               --destination "${{ github.workspace }}/_site/documentation-portal"
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

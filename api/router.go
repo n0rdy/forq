@@ -127,7 +127,7 @@ func (ar *Router) nackMessage(w http.ResponseWriter, req *http.Request) {
 }
 
 func (ar *Router) healthcheck(w http.ResponseWriter, req *http.Request) {
-	if ar.monitoringService.IsHealthy() {
+	if ar.monitoringService.IsHealthy(req.Context()) {
 		ar.sendNoContentEmptyResponse(w)
 	} else {
 		ar.sendErrorResponse(w, http.StatusServiceUnavailable, common.ErrCodeServiceUnhealthy)
