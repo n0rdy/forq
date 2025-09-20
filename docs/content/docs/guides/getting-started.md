@@ -100,7 +100,7 @@ where `{message_id}` is the `id` of the message received in the previous step.
 - [Consuming Messages](/documentation-portal/docs/guides/consuming-messages/) - How to receive and acknowledge messages
 - [Metrics](/documentation-portal/docs/guides/metrics/) - Setting up monitoring with Prometheus
 - [Admin UI Guide](/documentation-portal/docs/guides/admin-ui/) - Using the admin interface
-- [API Reference](/documentation-portal/docs/reference/api/) - Complete API documentation
-- [SDKs](/documentation-portal/docs/reference/sdks/) - Client libraries for various languages
-- [Forq vs Other MQs](/documentation-portal/docs/guides/forq-vs-other-mqs/) - Comparison with other message queue systems
-- [Forq Internals](/documentation-portal/docs/guides/internals/) - How (and why) Forq works under the hood for fellow nerds
+- [API Reference](/documentation-portal/docs/reference/api-reference/) - Complete API documentation
+- [SDKs](/documentation-portal/docs/reference/forq-sdks/) - Client libraries for various languages
+- [Forq vs Other MQs](/documentation-portal/docs/guides/forq-vs-other-message-queues/) - Comparison with other message queue systems
+- [Forq Internals](/documentation-portal/docs/guides/forq-internals/) - How (and why) Forq works under the hood for fellow nerds
