@@ -37,7 +37,7 @@ Some of them would have benefited from additional indexes, but that would have m
 
 Look at this beauty:
 
-![Login Page Screenshot](./forq-admin-ui-login.png)
+![Login Page Screenshot](/images/forq-admin-ui-login.png)
 
 You need to log in using the `FORQ_AUTH_SECRET` you set in your environment variables.
 
@@ -48,7 +48,7 @@ Annoying, I know, but I decided to keep SQLite busy with messages only for perfo
 
 Once you are in, you will see the dashboard:
 
-![Dashboard Screenshot](./forq-admin-ui-dashboard.png)
+![Dashboard Screenshot](/images/forq-admin-ui-dashboard.png)
 
 It even supports dark mode, see the top-right corner next to Logout button.
 
@@ -64,7 +64,7 @@ You can click on a queue name to view its details.
 
 When you click on a queue name, you will be taken to the queue details page:
 
-![Queue Details Screenshot](./forq-admin-ui-queue-details.png)
+![Queue Details Screenshot](/images/forq-admin-ui-queue-details.png)
 
 Here you can see:
 - Total number of messages in the queue
@@ -90,7 +90,7 @@ Let's take a look at the Queue Details page for DLQs.
 
 ### Queue Details Page (For DLQs)
 
-![DLQ Details Screenshot](./forq-admin-ui-queue-details-dlq.png)
+![DLQ Details Screenshot](/images/forq-admin-ui-queue-details-dlq.png)
 
 As you can see, it looks the same, except the new buttons that appear:
 - "Requeue All" - requeues all messages in the DLQ back to the original queue
@@ -110,7 +110,7 @@ It's not possible to requeue the message that is being processed at the moment.
 
 When you click on a message ID, you will see its details:
 
-![Message Details Screenshot](./forq-admin-ui-message-details.png)
+![Message Details Screenshot](/images/forq-admin-ui-message-details.png)
 
 You can see:
 - Status

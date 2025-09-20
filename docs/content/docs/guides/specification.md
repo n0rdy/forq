@@ -26,7 +26,7 @@ Forq is backed by SQLite, which means that the messages are persisted to disk, a
 
 ## High-level Architecture
 
-![Forq High-level Architecture](./forq-arch.png)
+![Forq High-level Architecture](/images/forq-arch.png)
 
 The green boxes represent the Forq service, which consists of:
 - The API server, which exposes a REST API for sending and receiving messages, healtchecks, and metrics (if enabled).
