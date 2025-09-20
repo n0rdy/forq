@@ -40,7 +40,7 @@ jobs:
       - name: Build landing
         working-directory: site
         run: |
-          hugo mod download
+          hugo mod get
           hugo --minify \
                --baseURL "${{ env.BASE_URL }}" \
                --destination "${{ github.workspace }}/_site"
