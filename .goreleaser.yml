@@ -1,0 +1,134 @@
+version: 2
+
+project_name: forq
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: forq
+    binary: forq
+    main: ./
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+    ignore:
+      - goos: windows
+        goarch: arm64
+
+archives:
+  - id: forq
+    format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+    files:
+      - LICENSE
+      - README.md
+
+dockers:
+  - id: forq-amd64
+    image_templates:
+      - "{{ .Env.DOCKER_USERNAME }}/forq:{{ .Version }}-amd64"
+      - "{{ .Env.DOCKER_USERNAME }}/forq:latest-amd64"
+    dockerfile: Dockerfile
+    use: buildx
+    build_flag_templates:
+      - --platform=linux/amd64
+      - --pull
+    extra_files:
+      - db/migrations
+      - ui/templates
+
+  - id: forq-arm64
+    image_templates:
+      - "{{ .Env.DOCKER_USERNAME }}/forq:{{ .Version }}-arm64v8"
+      - "{{ .Env.DOCKER_USERNAME }}/forq:latest-arm64v8"
+    dockerfile: Dockerfile
+    use: buildx
+    build_flag_templates:
+      - --platform=linux/arm64
+      - --pull
+    extra_files:
+      - db/migrations
+      - ui/templates
+
+docker_manifests:
+  - name_template: "{{ .Env.DOCKER_USERNAME }}/forq:{{ .Version }}"
+    image_templates:
+      - "{{ .Env.DOCKER_USERNAME }}/forq:{{ .Version }}-amd64"
+      - "{{ .Env.DOCKER_USERNAME }}/forq:{{ .Version }}-arm64v8"
+
+  - name_template: "{{ .Env.DOCKER_USERNAME }}/forq:latest"
+    image_templates:
+      - "{{ .Env.DOCKER_USERNAME }}/forq:latest-amd64"
+      - "{{ .Env.DOCKER_USERNAME }}/forq:latest-arm64v8"
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^ci:'
+      - '^chore:'
+      - '^style:'
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: 'Bug fixes'
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: Others
+      order: 999
+
+release:
+  github:
+    owner: n0rdy  # Change this to your GitHub username
+    name: forq
+  draft: false
+  prerelease: auto
+  mode: replace
+  header: |
+    ## Forq {{ .Tag }}
+
+    **Full Changelog**: https://github.com/n0rdy/forq/compare/{{ .PreviousTag }}...{{ .Tag }}
+
+    ### Installation
+
+    **Binary releases:**
+    ```bash
+    # Linux/macOS (replace with your arch)
+    curl -L https://github.com/n0rdy/forq/releases/download/{{ .Tag }}/forq_{{ title .Os }}_{{ .Arch }}.tar.gz | tar -xz
+    chmod +x forq && sudo mv forq /usr/local/bin/
+    ```
+
+    **Docker:**
+    ```bash
+    docker run -e FORQ_AUTH_SECRET=your-secret -p 8080:8080 -p 8081:8081 {{ .Env.DOCKER_USERNAME }}/forq:{{ .Tag }}
+    ```

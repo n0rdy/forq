@@ -1,25 +1,4 @@
-# Build stage
-FROM golang:1.25-alpine AS builder
-
-# Install build dependencies
-RUN apk add --no-cache git
-
-# Set working directory
-WORKDIR /app
-
-# Copy go mod files
-COPY go.mod go.sum ./
-
-# Download dependencies
-RUN go mod download
-
-# Copy source code
-COPY . .
-
-# Build the binary (static build with pure Go SQLite)
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -ldflags '-w -s -extldflags "-static"' -o forq .
-
-# Runtime stage
+# Runtime stage (GoReleaser provides the binary)
 FROM alpine:latest
 
 # Install runtime dependencies
@@ -35,13 +14,12 @@ RUN addgroup -g 1001 -S forq && \
 # Set working directory
 WORKDIR /app
 
-# Copy binary from builder
-COPY --from=builder /app/forq .
+# Copy pre-built binary (provided by GoReleaser)
+COPY forq .
 
 # Copy runtime assets
-COPY --from=builder /app/db/migrations ./db/migrations
-#COPY --from=builder /app/ui/static ./ui/static
-COPY --from=builder /app/ui/templates ./ui/templates
+COPY db/migrations ./db/migrations
+COPY ui/templates ./ui/templates
 
 # Change ownership
 RUN chown -R forq:forq /app
