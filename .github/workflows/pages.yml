@@ -42,8 +42,7 @@ jobs:
         run: |
           hugo --minify \
                --baseURL "${{ env.BASE_URL }}" \
-               --destination "${{ github.workspace }}/_site" \
-               --verbose
+               --destination "${{ github.workspace }}/_site"
 
       - name: Debug landing build
         run: |
