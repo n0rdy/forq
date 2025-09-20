@@ -30,10 +30,6 @@ builds:
 
 archives:
   - id: forq
-    format: tar.gz
-    format_overrides:
-      - goos: windows
-        format: zip
     name_template: >-
       {{ .ProjectName }}_
       {{- title .Os }}_
@@ -45,42 +41,18 @@ archives:
       - README.md
 
 dockers:
-  - id: forq-amd64
+  - id: forq
     image_templates:
-      - "{{ .Env.DOCKER_USERNAME }}/forq:{{ .Version }}-amd64"
-      - "{{ .Env.DOCKER_USERNAME }}/forq:latest-amd64"
+      - "{{ .Env.DOCKER_USERNAME }}/forq:{{ .Version }}"
+      - "{{ .Env.DOCKER_USERNAME }}/forq:latest"
     dockerfile: Dockerfile
     use: buildx
     build_flag_templates:
-      - --platform=linux/amd64
+      - --platform=linux/amd64,linux/arm64
       - --pull
     extra_files:
       - db/migrations
       - ui/templates
-
-  - id: forq-arm64
-    image_templates:
-      - "{{ .Env.DOCKER_USERNAME }}/forq:{{ .Version }}-arm64v8"
-      - "{{ .Env.DOCKER_USERNAME }}/forq:latest-arm64v8"
-    dockerfile: Dockerfile
-    use: buildx
-    build_flag_templates:
-      - --platform=linux/arm64
-      - --pull
-    extra_files:
-      - db/migrations
-      - ui/templates
-
-docker_manifests:
-  - name_template: "{{ .Env.DOCKER_USERNAME }}/forq:{{ .Version }}"
-    image_templates:
-      - "{{ .Env.DOCKER_USERNAME }}/forq:{{ .Version }}-amd64"
-      - "{{ .Env.DOCKER_USERNAME }}/forq:{{ .Version }}-arm64v8"
-
-  - name_template: "{{ .Env.DOCKER_USERNAME }}/forq:latest"
-    image_templates:
-      - "{{ .Env.DOCKER_USERNAME }}/forq:latest-amd64"
-      - "{{ .Env.DOCKER_USERNAME }}/forq:latest-arm64v8"
 
 checksum:
   name_template: 'checksums.txt'
