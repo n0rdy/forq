@@ -7,7 +7,7 @@ banner:
   button:
     enable: true
     label: "View Documentation"
-    link: "/documentation-portal"
+    link: "/documentation-portal/docs/guides/getting-started/"
 
 # Features
 features:
