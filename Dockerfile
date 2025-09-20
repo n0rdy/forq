@@ -17,7 +17,7 @@ RUN go mod download
 COPY . .
 
 # Build the binary (static build with pure Go SQLite)
-RUN CGO_ENABLED=0 GOOS=linux go build -a -ldflags '-extldflags "-static"' -o forq .
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -ldflags '-w -s -extldflags "-static"' -o forq .
 
 # Runtime stage
 FROM alpine:latest
@@ -54,7 +54,6 @@ EXPOSE 8080 8081
 
 # Set default environment variables
 ENV FORQ_ENV=pro
-
 
 # Run the binary
 CMD ["./forq"]
