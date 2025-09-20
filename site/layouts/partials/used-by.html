@@ -1,0 +1,43 @@
+{{ with site.Data.used_by }}
+<section class="section bg-light dark:bg-darkmode-light">
+  <div class="container">
+    <div class="row">
+      <div class="mx-auto mb-12 text-center lg:col-8">
+        <h2 class="mb-4">{{ .title }}</h2>
+        <p class="text-lg">{{ .subtitle }}</p>
+      </div>
+    </div>
+    <div class="row justify-center">
+      {{ range .products }}
+        <div class="mb-6 md:col-6 lg:col-4 xl:col-3 flex justify-center">
+          <div class="rounded-lg bg-dark dark:bg-white p-4 shadow-lg transition-transform hover:scale-105 flex items-center space-x-3 w-48">
+            {{ if .logo }}
+              {{ $logo := resources.Get .logo }}
+              {{ if $logo }}
+                <img
+                  src="{{ $logo.RelPermalink }}"
+                  alt="{{ .name }} logo"
+                  class="h-10 w-10 rounded object-contain flex-shrink-0"
+                  loading="lazy"
+                />
+              {{ end }}
+            {{ end }}
+            <h3 class="text-base font-semibold text-white dark:text-dark">
+              <a 
+                href="{{ .url }}"
+                class="text-white dark:text-dark hover:underline"
+                {{ if ne .category "own" }}
+                  target="_blank" rel="nofollow noopener"
+                {{ else }}
+                  target="_blank" rel="noopener"
+                {{ end }}>
+                {{ .name }}
+              </a>
+            </h3>
+          </div>
+        </div>
+      {{ end }}
+    </div>
+  </div>
+</section>
+{{ end }}

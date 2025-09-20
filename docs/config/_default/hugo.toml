@@ -1,0 +1,104 @@
+title = "Forq Documentation"
+baseurl = "https://forq.sh/documentation-portal/"
+
+# Hugo Modules
+[module]
+  [[module.imports]]
+    path = "github.com/thuliteio/doks"
+    # Disable mounting content from theme
+    [[module.imports.mounts]]
+      source = "layouts"
+      target = "layouts"
+    [[module.imports.mounts]]
+      source = "assets"
+      target = "assets"
+    [[module.imports.mounts]]
+      source = "static"
+      target = "static"
+disableAliases = true
+disableHugoGeneratorInject = true
+# disableKinds = ["taxonomy", "term"]
+enableEmoji = true
+enableGitInfo = true
+enableRobotsTXT = true
+languageCode = "en-US"
+rssLimit = 10
+summarylength = 20 # 70 (default)
+
+# Single language (English only)
+defaultContentLanguage = "en"
+defaultContentLanguageInSubdir = false
+
+copyRight = "Copyright (c) 2025 Myko Nordy"
+
+[build.buildStats]
+  enable = true
+
+[outputs]
+  home = ["HTML", "RSS", "searchIndex"]
+  section = ["HTML", "RSS", "SITEMAP"]
+
+[outputFormats.searchIndex]
+  mediaType = "application/json"
+  baseName = "search-index"
+  isPlainText = true
+  notAlternative = true
+
+# Add output format for section sitemap.xml
+[outputFormats.SITEMAP]
+  mediaType = "application/xml"
+  baseName = "sitemap"
+  isHTML = false
+  isPlainText = true
+  noUgly = true
+  rel  = "sitemap"
+
+[sitemap]
+  changefreq = "monthly"
+  filename = "sitemap.xml"
+  priority = 0.5
+
+[caches]
+  [caches.getjson]
+    dir = ":cacheDir/:project"
+    maxAge = -1 # "30m"
+
+# No taxonomies needed for simple docs
+
+# Ignore theme example files
+ignoreFiles = [
+  "_vendor/github.com/thuliteio/doks/content/docs/guides/example.md",
+  "_vendor/github.com/thuliteio/doks/content/docs/reference/example.md",
+  "_vendor/github.com/thuliteio/doks/content/blog/.*",
+  "_vendor/github.com/thuliteio/doks/content/privacy.md"
+]
+
+[permalinks]
+  docs = "/docs/:sections[1:]/:slug/"
+
+[minify.tdewolff.html]
+  keepWhitespace = false
+
+[pagination]
+  pagerSize = 10
+
+[related]
+  threshold = 80
+  includeNewer = true
+  toLower = false
+    [[related.indices]]
+      name = "categories"
+      weight = 100
+    [[related.indices]]
+      name = "tags"
+      weight = 80
+    [[related.indices]]
+      name = "date"
+      weight = 10
+
+[imaging]
+  anchor = "Center"
+  bgColor = "#ffffff"
+  hint = "photo"
+  quality = 85
+  resampleFilter = "Lanczos"

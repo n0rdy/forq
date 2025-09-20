@@ -1,0 +1,7 @@
+title: "Trusted in Production"
+subtitle: "Real products powered by Forq"
+products:
+  - name: "Talk To Locals"
+    logo: "images/logos/talktolocals.png"
+    url: "https://talktolocals.ai"
+    category: "own"  # dofollow for own products

@@ -9,6 +9,7 @@ import (
 	"forq/configs"
 	"forq/db"
 	"forq/jobs/cleanup"
+	"forq/jobs/maintenance"
 	metricsJobs "forq/jobs/metrics"
 	"forq/metrics"
 	"forq/services"
@@ -24,6 +25,10 @@ import (
 
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/rs/zerolog/log"
+)
+
+const (
+	minAuthSecretLength = 32
 )
 
 func main() {
@@ -68,6 +73,8 @@ func main() {
 	defer failedDlqMessagesCleanupJob.Close()
 	staleMessagesCleanupJob := cleanup.NewStaleMessagesCleanupJob(metricsService, repo, appConfigs.JobsIntervals.StaleMessagesCleanupMs)
 	defer staleMessagesCleanupJob.Close()
+	dbOptimizationJob := maintenance.NewDbOptimizationJob(repo, appConfigs.JobsIntervals.DbOptimizationMs, appConfigs.JobsIntervals.DbOptimizationMaxDurationMs)
+	defer dbOptimizationJob.Close()
 
 	if metricsEnabled {
 		queuesDepthMetricsJob := metricsJobs.NewQueuesDepthMetricsJob(metricsService, repo, appConfigs.JobsIntervals.QueuesDepthMetricsMs)
@@ -111,7 +118,7 @@ func main() {
 
 	// Start API server
 	go func() {
-		log.Info().Msgf("Starting API server on %s (HTTP/2 only)", apiAddr)
+		log.Info().Msgf("Starting API server on %s", apiAddr)
 		err := apiServer.ListenAndServe()
 		if err != nil {
 			shutdownOnce.Do(func() { close(shutdownCh) })
@@ -125,7 +132,7 @@ func main() {
 
 	// Start UI server
 	go func() {
-		log.Info().Msgf("Starting UI server on %s (HTTP/1.1 + HTTP/2)", uiAddr)
+		log.Info().Msgf("Starting UI server on %s", uiAddr)
 		err := uiServer.ListenAndServe()
 		if err != nil {
 			shutdownOnce.Do(func() { close(shutdownCh) })
@@ -179,6 +186,10 @@ func getAuthSecret() string {
 		log.Fatal().Msg("auth secret is not provided: set FORQ_AUTH_SECRET environment variable")
 		panic("auth secret is not provided: set FORQ_AUTH_SECRET environment variable")
 	}
+	if len(authSecret) < minAuthSecretLength {
+		log.Fatal().Msgf("auth secret is too short: must be at least %d characters", minAuthSecretLength)
+		panic(fmt.Sprintf("auth secret is too short: must be at least %d characters", minAuthSecretLength))
+	}
 	return authSecret
 }
 
@@ -202,6 +213,10 @@ func getMetricsConfigs() (bool, string) {
 	if metricsAuthSecret == "" {
 		log.Fatal().Msg("FORQ_METRICS_AUTH_SECRET env var is required when metrics are enabled")
 		panic("FORQ_METRICS_AUTH_SECRET env var is required when metrics are enabled")
+	}
+	if len(metricsAuthSecret) < minAuthSecretLength {
+		log.Fatal().Msgf("metrics auth secret is too short: must be at least %d characters", minAuthSecretLength)
+		panic(fmt.Sprintf("metrics auth secret is too short: must be at least %d characters", minAuthSecretLength))
 	}
 	return true, metricsAuthSecret
 }

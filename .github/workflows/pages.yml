@@ -1,0 +1,92 @@
+name: Build & Deploy (Hugo landing + Doks docs)
+
+on:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+env:
+  BASE_URL: https://forq.sh
+  HUGO_VERSION: "0.150.0"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+
+      - uses: peaceiris/actions-hugo@v3
+        with:
+          hugo-version: ${{ env.HUGO_VERSION }}
+          extended: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "lts/*"
+
+      # Build landing to _site/
+      - name: Install deps (landing)
+        working-directory: site
+        run: |
+          if [ -f package.json ]; then npm ci; fi
+      - name: Build landing
+        working-directory: site
+        run: |
+          hugo --minify \
+               --baseURL "${{ env.BASE_URL }}" \
+               --destination "${{ github.workspace }}/_site"
+
+      - name: Debug landing build
+        run: |
+          echo "=== _site directory contents ==="
+          ls -la ${{ github.workspace }}/_site/
+          echo "=== index.html size ==="
+          ls -la ${{ github.workspace }}/_site/index.html || echo "No index.html found"
+          echo "=== First few lines of index.html ==="
+          head -5 ${{ github.workspace }}/_site/index.html || echo "Cannot read index.html"
+
+      # Build docs to _site/docs/
+      - name: Install deps (docs)
+        working-directory: docs
+        run: |
+          if [ -f package.json ]; then npm ci; fi
+
+      # Generate API documentation from OpenAPI spec
+      - name: Generate API docs
+        run: |
+          npm install -g @redocly/cli
+          mkdir -p docs/static/api
+          npx @redocly/cli build-docs openapi.yaml --output docs/static/api/index.html
+          cp openapi.yaml docs/static/api/
+
+      - name: Build docs
+        working-directory: docs
+        run: |
+          hugo --minify --gc \
+               --baseURL "${{ env.BASE_URL }}/documentation-portal/" \
+               --destination "${{ github.workspace }}/_site/documentation-portal"
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

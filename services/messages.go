@@ -68,7 +68,7 @@ func (ms *MessagesService) ProcessNewMessage(newMessage common.NewMessageRequest
 		ProcessAfter: processAfter,
 		ReceivedAt:   nowMs,
 		UpdatedAt:    nowMs,
-		ExpiresAfter: nowMs + ms.appConfigs.QueueTtlMs,
+		ExpiresAfter: processAfter + ms.appConfigs.QueueTtlMs,
 	}
 
 	err = ms.forqRepo.InsertMessage(&messageToInsert, ctx)
@@ -179,7 +179,7 @@ func (ms *MessagesService) DeleteDlqMessage(messageId string, queueName string, 
 		return common.ErrBadRequestDlqOnlyOp
 	}
 
-	err := ms.forqRepo.DeleteMessage(messageId, queueName, ctx)
+	err := ms.forqRepo.DeleteMessageFromDlq(messageId, queueName, ctx)
 	if err != nil {
 		return err
 	}

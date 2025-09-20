@@ -23,7 +23,7 @@ type ForqRepo struct {
 
 func NewSQLiteRepo(dbPath string, appConfigs *configs.AppConfigs) (*ForqRepo, error) {
 	// Create read connection with multiple connections for concurrent reads
-	dbRead, err := sql.Open("sqlite", dbPath)
+	dbRead, err := sql.Open("sqlite", applyConnectionSettings(dbPath, false))
 	if err != nil {
 		return nil, err
 	}
@@ -37,7 +37,9 @@ func NewSQLiteRepo(dbPath string, appConfigs *configs.AppConfigs) (*ForqRepo, er
 	}
 
 	// Create write connection with single connection to serialize writes
-	dbWrite, err := sql.Open("sqlite", dbPath)
+	// we are running optimizations pragma ONLY on the write connection, as it might lock the database for a while
+	// and our read flow doesn't expect any locks.
+	dbWrite, err := sql.Open("sqlite", applyConnectionSettings(dbPath, true))
 	if err != nil {
 		dbRead.Close()
 		return nil, err
@@ -57,6 +59,17 @@ func NewSQLiteRepo(dbPath string, appConfigs *configs.AppConfigs) (*ForqRepo, er
 		dbWrite:    dbWrite,
 		appConfigs: appConfigs,
 	}, nil
+}
+
+func applyConnectionSettings(dbPath string, withOptimization bool) string {
+	urlWithSettings := dbPath + "?_pragma=synchronous(NORMAL)&_pragma=temp_store(MEMORY)"
+	if withOptimization {
+		// from SQLite docs:
+		// Applications with long-lived database connections should run "PRAGMA optimize=0x10002" when the database connection first opens,
+		// then run "PRAGMA optimize" again at periodic intervals - perhaps once per day.
+		urlWithSettings += "&_pragma=optimize(0x10002)"
+	}
+	return urlWithSettings
 }
 
 func (fr *ForqRepo) InsertMessage(newMessage *NewMessage, ctx context.Context) error {
@@ -84,7 +97,8 @@ func (fr *ForqRepo) InsertMessage(newMessage *NewMessage, ctx context.Context) e
 func (fr *ForqRepo) SelectMessageForConsuming(queueName string, ctx context.Context) (*MessageForConsuming, error) {
 	nowMs := time.Now().UnixMilli()
 
-	// we are ignoring expires_after here for performance boost reasons, as expired messaged are cleanup by the jobs
+	// we are ignoring expires_after here for performance boost reasons, as expired messaged are cleanup by the jobs.
+	// This query uses COVERING INDEX via `idx_queue_ready_for_consuming`, so it is very fast.
 	query := `
 		UPDATE messages
         SET
@@ -334,7 +348,7 @@ func (fr *ForqRepo) UpdateStaleMessages(ctx context.Context) (int64, error) {
 
 	res, err := fr.dbWrite.ExecContext(ctx, query,
 		fr.appConfigs.MaxDeliveryAttempts, // WHEN attempts >= ? (status check)
-		common.FailedStatus,               // THEN ?  		-- failed if no more attempts left
+		common.FailedStatus,               // THEN ?  			-- failed if no more attempts left
 		common.ReadyStatus,                // ELSE ?			-- ready if there are attempts left
 		nowMs,                             // process_after = ? -- immediate retry
 		nowMs,                             // updated_at = ?
@@ -414,7 +428,7 @@ func (fr *ForqRepo) UpdateExpiredMessagesForRegularQueues(ctx context.Context) (
             failure_reason = ?,
             updated_at = ?,
             expires_after = ?
-        WHERE status != ? AND expires_after < ? AND is_dlq = FALSE;`
+        WHERE status != ? AND is_dlq = FALSE AND expires_after < ?;`
 
 	res, err := fr.dbWrite.ExecContext(ctx, query,
 		common.ReadyStatus,                 // status = ?
@@ -482,33 +496,6 @@ func (fr *ForqRepo) RequeueDlqMessages(queueName string, ctx context.Context) (i
 	return rowsAffected, nil
 }
 
-func (fr *ForqRepo) DeleteExpiredMessagesFromRegularQueues(ctx context.Context) (int64, error) {
-	nowMs := time.Now().UnixMilli()
-
-	query := `
-		DELETE FROM messages
-		WHERE status != ? AND expires_after < ? AND is_dlq = FALSE;`
-
-	res, err := fr.dbWrite.ExecContext(ctx, query,
-		common.ProcessingStatus, // WHERE status != ?
-		nowMs,                   // expires_after < ?
-	)
-	if err != nil {
-		log.Error().Err(err).Msg("failed to delete expired messages from regular queues")
-		return 0, common.ErrInternal
-	}
-	if res == nil {
-		return 0, nil
-	}
-
-	rowsAffected, err := res.RowsAffected()
-	if err != nil {
-		log.Error().Err(err).Msg("failed to get rows affected after deleting expired messages from regular queues")
-		return 0, common.ErrInternal
-	}
-	return rowsAffected, nil
-}
-
 func (fr *ForqRepo) RequeueDlqMessage(messageId string, queueName string, ctx context.Context) error {
 	nowMs := time.Now().UnixMilli()
 	destinationQueueName := strings.TrimSuffix(queueName, common.DlqSuffix)
@@ -553,10 +540,10 @@ func (fr *ForqRepo) RequeueDlqMessage(messageId string, queueName string, ctx co
 	return nil
 }
 
-func (fr *ForqRepo) DeleteMessage(messageId string, queueName string, ctx context.Context) error {
+func (fr *ForqRepo) DeleteMessageFromDlq(messageId string, queueName string, ctx context.Context) error {
 	query := `
 		DELETE FROM messages
-		WHERE id = ? AND queue = ?;`
+		WHERE id = ? AND queue = ? AND is_dlq = TRUE;`
 
 	result, err := fr.dbWrite.ExecContext(ctx, query,
 		messageId, // WHERE id = ?
@@ -635,7 +622,7 @@ func (fr *ForqRepo) DeleteExpiredMessagesFromDlq(ctx context.Context) (int64, er
 
 	query := `
         DELETE FROM messages
-        WHERE status != ? AND expires_after < ? AND is_dlq = TRUE;`
+        WHERE status != ? AND is_dlq = TRUE AND expires_after < ?;`
 
 	res, err := fr.dbWrite.ExecContext(ctx, query,
 		common.ProcessingStatus, // WHERE status != ?
@@ -683,12 +670,23 @@ func (fr *ForqRepo) DeleteAllMessagesFromQueue(queueName string, ctx context.Con
 	return rowsAffected, nil
 }
 
-func (fr *ForqRepo) Ping() error {
-	err := fr.dbRead.Ping()
+func (fr *ForqRepo) Ping(ctx context.Context) error {
+	err := fr.dbRead.PingContext(ctx)
 	if err != nil {
 		return err
 	}
 	return fr.dbWrite.Ping()
+}
+
+func (fr *ForqRepo) Optimize(ctx context.Context) error {
+	// SQLite docs recommend running "PRAGMA optimize;" periodically to optimize the database
+	// https://www.sqlite.org/pragma.html#pragma_optimize
+	_, err := fr.dbWrite.ExecContext(ctx, "PRAGMA optimize;")
+	if err != nil {
+		log.Error().Err(err).Msg("failed to optimize database")
+		return common.ErrInternal
+	}
+	return nil
 }
 
 func (fr *ForqRepo) Close() error {
@@ -709,7 +707,7 @@ func (fr *ForqRepo) Close() error {
 func (fr *ForqRepo) processAfterCases(nowMs int64) string {
 	var processAfterCases strings.Builder
 
-	// Build WHEN clauses for each backoff delay
+	// builds WHEN clauses for each backoff delay
 	for i, delay := range fr.appConfigs.BackoffDelaysMs {
 		if i < len(fr.appConfigs.BackoffDelaysMs)-1 {
 			processAfterCases.WriteString(fmt.Sprintf("WHEN attempts + 1 = %d THEN %d ", i+1, nowMs+delay))

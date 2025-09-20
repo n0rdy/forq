@@ -1,0 +1,22 @@
+{
+  "name": "forq-site",
+  "description": "Forq landing site",
+  "version": "1.0.0",
+  "license": "AGPL-3.0",
+  "private": true,
+  "scripts": {
+    "dev": "hugo server",
+    "build": "hugo --gc --minify",
+    "preview": "hugo server -e production --minify",
+    "format": "prettier -w .",
+    "clean": "hugo mod clean && rm -rf public/ resources/"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.1.12",
+    "@tailwindcss/forms": "^0.5.10", 
+    "@tailwindcss/typography": "^0.5.16",
+    "prettier": "^3.6.2",
+    "prettier-plugin-go-template": "0.0.15",
+    "tailwindcss": "^4.1.12"
+  }
+}
