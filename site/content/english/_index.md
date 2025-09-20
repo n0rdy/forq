@@ -38,8 +38,8 @@ features:
       - "**FIFO order**"
     button:
       enable: true
-      label: "View API Docs"
-      link: "/documentation-portal/docs/reference/api-reference/"
+      label: "Check Specification"
+      link: "/documentation-portal/docs/guides/specification/"
 
   - title: "Developer Experience First"
     image: "/images/apidoc.png"
@@ -67,6 +67,6 @@ features:
       - "**Open-source, but closed-contribution:** no PRs, please"
     button:
       enable: true
-      label: "Check Specification"
-      link: "/documentation-portal/docs/guides/specification/"
+      label: "Check Philosophy Behind Forq"
+      link: "/documentation-portal/docs/guides/philosophy/"
 ---
