@@ -24,7 +24,7 @@ features:
     button:
       enable: true
       label: "Get Started"
-      link: "/documentation-portal/guides/getting-started/"
+      link: "/documentation-portal/docs/guides/getting-started/"
 
   - title: "Production Ready Features"
     image: "/images/benchmarks.png"
@@ -39,7 +39,7 @@ features:
     button:
       enable: true
       label: "View API Docs"
-      link: "/documentation-portal/reference/api/"
+      link: "/documentation-portal/docs/reference/api-reference/"
 
   - title: "Developer Experience First"
     image: "/images/apidoc.png"
@@ -67,6 +67,6 @@ features:
       - "**Open-source, but closed-contribution:** no PRs, please"
     button:
       enable: true
-      label: "Check the Specification"
-      link: "/documentation-portal/guides/specification/"
+      label: "Check Specification"
+      link: "/documentation-portal/docs/guides/specification/"
 ---
