@@ -31,3 +31,5 @@ yarn-error.log*
 # Logs
 *.log
 */**.log
+# Added by goreleaser init:
+dist/
