@@ -15,7 +15,7 @@ toc: true
 ---
 
 {{< callout context="tip" title="Interactive API Documentation" icon="outline/external-link" >}}
-**[View Interactive API Documentation →](/docs/api/)**
+**[View Interactive API Documentation →](/documentation-portal/api/)**
 
 Complete OpenAPI specification with interactive examples, request/response details, and authentication information.
 {{< /callout >}}

@@ -18,6 +18,6 @@ seo:
 
 ## Interactive API Documentation
 
-**[📖 View Interactive API Documentation →](/docs/api/)**
+**[📖 View Interactive API Documentation →](/documentation-portal/api/)**
 
 Complete OpenAPI specification with live examples, detailed request/response schemas, and authentication information.
