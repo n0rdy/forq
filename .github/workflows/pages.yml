@@ -15,7 +15,7 @@ concurrency:
 
 env:
   BASE_URL: https://forq.sh
-  HUGO_VERSION: "0.150.0"
+  HUGO_VERSION: "0.134.0"
 
 jobs:
   build:
