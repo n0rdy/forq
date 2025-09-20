@@ -1,6 +1,11 @@
 # Guide and tutorial sections removed - using simple docs structure
 
 [[main]]
+  name = "Main"
+  url = "https://forq.sh/"
+  weight = 5
+
+[[main]]
   name = "Docs"
   url = "/docs/guides/getting-started/"
   weight = 10
