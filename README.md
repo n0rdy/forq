@@ -1,7 +1,5 @@
 # Forq - Simple Message Queue powered by SQLite
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/n0rdy/forq.svg)](https://pkg.go.dev/github.com/n0rdy/forq)
-
 Forq is a simple single-binary message queue on top of SQLite, designed for small to medium workloads.
 
 The assumption is that you will self-host Forq on a VPS or a small cloud instance, and use it for background jobs, task queues, or inter-service communication.

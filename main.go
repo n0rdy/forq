@@ -21,7 +21,7 @@ import (
 	"github.com/n0rdy/forq/ui"
 	"github.com/n0rdy/forq/utils"
 
-	_ "github.com/golang-migrate/migrate/v4/database/sqlite3"
+	_ "github.com/golang-migrate/migrate/v4/database/sqlite"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 
 	"github.com/golang-migrate/migrate/v4"
@@ -284,7 +284,7 @@ func getDbPath() (string, error) {
 func runMigrations(dbPath string) {
 	// x-no-tx-wrap=true to disable transaction wrapping for PRAGMA statements, as otherwise it fails:
 	// https://github.com/golang-migrate/migrate/issues/346
-	dbURL := fmt.Sprintf("sqlite3://file:%s?cache=shared&mode=rwc&x-no-tx-wrap=true", dbPath)
+	dbURL := fmt.Sprintf("sqlite://file:%s?cache=shared&mode=rwc&x-no-tx-wrap=true", dbPath)
 
 	m, err := migrate.New("file://db/migrations", dbURL)
 	if err != nil {
