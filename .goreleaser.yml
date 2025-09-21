@@ -129,5 +129,15 @@ release:
 
     **Docker:**
     ```bash
-    docker run -e FORQ_AUTH_SECRET=your-secret -p 8080:8080 -p 8081:8081 {{ .Env.DOCKER_USERNAME }}/forq:{{ .Tag }}
+    docker run -d \
+      --name forq \
+      --restart unless-stopped \
+      -e FORQ_AUTH_SECRET=your-auth-secret-min-32-chars-long \
+      -e FORQ_DB_PATH=/app/data/forq/forq.db \
+      -e FORQ_API_ADDR=0.0.0.0:8080 \
+      -e FORQ_UI_ADDR=0.0.0.0:8081 \
+      -p 8080:8080 \
+      -p 8081:8081 \
+      -v ~/forq-data:/app/data/forq \
+      {{ .Env.DOCKER_USERNAME }}/forq:{{ .Tag }}
     ```

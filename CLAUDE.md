@@ -40,16 +40,23 @@ cd docs && npm run clean        # Clean build artifacts
 
 ### Docker
 ```bash
-# Build Docker image
-docker build -t forq .
-
-# Run with Docker
-docker run -e FORQ_AUTH_SECRET=your-secret \
-           -e FORQ_API_ADDR=:8080 \
-           -e FORQ_UI_ADDR=:8081 \
-           -p 8080:8080 -p 8081:8081 \
-           forq
+docker run -d \
+  --name forq \
+  --restart unless-stopped \
+  -e FORQ_AUTH_SECRET=your-auth-secret-min-32-chars-long \
+  -e FORQ_DB_PATH=/app/data/forq/forq.db \
+  -e FORQ_API_ADDR=0.0.0.0:8080 \
+  -e FORQ_UI_ADDR=0.0.0.0:8081 \
+  -p 8080:8080 \
+  -p 8081:8081 \
+  -v ~/forq-data:/app/data/forq \
+  mykonordy/forq:latest
 ```
+
+**For Docker, these env vars must be set:**
+- `FORQ_DB_PATH` - Sets explicit database location inside container
+- `FORQ_API_ADDR=0.0.0.0:8080` - Binds API to all interfaces (required for Docker port mapping)
+- `FORQ_UI_ADDR=0.0.0.0:8081` - Binds UI to all interfaces (required for Docker port mapping)
 
 ## Architecture Overview
 
