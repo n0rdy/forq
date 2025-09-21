@@ -1,5 +1,6 @@
 ---
 title: "Consuming Messages"
+slug: "consuming-messages"
 description: "How to receive messages from queues"
 lead: "Learn how to consume messages from queues in Forq using the REST API."
 date: 2025-09-10T19:00:00+00:00
@@ -18,7 +19,7 @@ Consuming messages from Forq is a two-step approach: fetch the message, and then
 
 ## API
 
-See the [API Reference](/documentation-portal/reference/api/) for the complete API documentation.
+See the [API Reference](/documentation-portal/docs/reference/api/) for the complete API documentation.
 
 ### Consume Message
 

@@ -1,5 +1,6 @@
 ---
 title: "Forq vs Other Message Queues"
+slug: "forq-vs-other-mqs"
 description: "Comparison of Forq with other popular message queue systems"
 lead: "Understand the differences, pros and cons of Forq compared to other message queue solutions."
 date: 2025-09-10T19:00:00+00:00

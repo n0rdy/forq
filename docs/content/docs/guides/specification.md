@@ -1,5 +1,6 @@
 ---
 title: "Specification"
+slug: "specification"
 description: "Overview of Forq features and design"
 lead: "Check it out to understand the design and capabilities of Forq!"
 date: 2025-09-10T19:00:00+00:00
@@ -69,13 +70,13 @@ These are special queues where messages that could not be processed successfully
 Each standard queue has its own DLQ. The DLQ name is the standard queue name with the suffix `-dlq`.
 
 There are two ways how to process messages in the DLQ:
-- via the Admin UI, where you can view, requeue and delete messages in the DLQ. Learn more in the [Admin UI guide](./admin-ui.md).
+- via the Admin UI, where you can view, requeue and delete messages in the DLQ. Learn more in the [Admin UI guide](/documentation-portal/docs/guides/admin-ui/).
 - via the API, where you can receive and delete messages in the DLQ. Basically, as with standard queues, just use the DLQ name.
 
 By default, DLQs have a TTL of 168 hours (7 days), which means that messages that are not processed within 7 days will be deleted.
 You can change the TTL by setting the `FORQ_DLQ_TTL_HOURS` environment variable.
 
-If you are interested to learn more about internal implementation of queues, check out the [Internals Guide](./internals.md).
+If you are interested to learn more about internal implementation of queues, check out the [Internals Guide](/documentation-portal/docs/guides/internals/).
 
 ## Messages
 

@@ -1,5 +1,6 @@
 ---
 title: "API Reference"
+slug: "api"
 description: "Complete Forq API documentation"
 lead: "RESTful API endpoints for message queue operations."
 date: 2025-09-10T19:00:00+00:00

@@ -1,5 +1,6 @@
 ---
 title: "Forq SDKs"
+slug: "sdks"
 description: "Overview of available Forq SDKs for various programming languages."
 lead: "Client libraries for easy integration with Forq."
 date: 2025-09-10T19:00:00+00:00
