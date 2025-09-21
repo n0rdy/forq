@@ -74,7 +74,7 @@ Uses a single SQLite table (`messages`) for both regular queues and dead letter 
 ### Configuration
 All configuration via environment variables:
 - **Required**: `FORQ_AUTH_SECRET` (authentication token)
-- **Optional**: `FORQ_ENV` (local|pro), `FORQ_METRICS_ENABLED` (true|false), `FORQ_API_ADDR`, `FORQ_UI_ADDR`, `FORQ_QUEUE_TTL_HOURS`, `FORQ_DLQ_TTL_HOURS`
+- **Optional**: `FORQ_DB_PATH` (default: OS-specific based on utils/os.go), `FORQ_ENV` (local|pro), `FORQ_METRICS_ENABLED` (true|false), `FORQ_API_ADDR`, `FORQ_UI_ADDR`, `FORQ_QUEUE_TTL_HOURS`, `FORQ_DLQ_TTL_HOURS`
 
 ### Key Design Principles
 - Single binary deployment with embedded SQLite

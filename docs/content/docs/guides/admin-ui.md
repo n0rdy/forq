@@ -1,5 +1,6 @@
 ---
 title: "Admin UI"
+slug: "admin-ui"
 description: "Overview of the Forq Admin UI and its features"
 lead: "Learn how to navigate and utilize the Forq Admin UI for managing your message queues."
 date: 2025-09-10T19:00:00+00:00

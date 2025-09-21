@@ -1,5 +1,6 @@
 ---
 title: "Producing Messages"
+slug: "producing-messages"
 description: "How to send messages to queues"
 lead: "Learn how to produce messages to queues in Forq using the REST API."
 date: 2025-09-10T19:00:00+00:00

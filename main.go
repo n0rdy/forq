@@ -38,7 +38,7 @@ func main() {
 	queueTtlHours, dlqTtlHours := getTtlConfigs()
 	apiAddr, uiAddr := getServerAddrs()
 
-	dbPath, err := utils.GetOrCreateDefaultDBPath()
+	dbPath, err := getDbPath()
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to get or create default database path")
 		panic(err)
@@ -270,6 +270,14 @@ func getServerAddrs() (string, string) {
 	}
 
 	return apiAddr, uiAddr
+}
+
+func getDbPath() (string, error) {
+	dbPath := os.Getenv("FORQ_DB_PATH")
+	if dbPath == "" {
+		return utils.GetOrCreateDefaultDBPath()
+	}
+	return dbPath, nil
 }
 
 func runMigrations(dbPath string) {

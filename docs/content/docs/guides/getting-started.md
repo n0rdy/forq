@@ -1,5 +1,6 @@
 ---
 title: "Getting Started"
+slug: "getting-started"
 description: "Quick start guide for Forq SQLite Queue Service"
 lead: "Get Forq up and running in minutes with this quick start guide."
 date: 2025-09-10T19:00:00+00:00
@@ -46,6 +47,7 @@ Forq uses environment variables for configuration:
 export FORQ_AUTH_SECRET=your-auth-secret-min-32-chars-long                # to use for API and Admin UI authentication
 
 # Optional
+export FORQ_DB_PATH=./data/forq.db                                        # Default: OS-specific location
 export FORQ_METRICS_ENABLED=false                                         # true|false (default: false)
 export FORQ_METRICS_AUTH_SECRET=your-metrics-secret-min-32-chars-long     # required if FORQ_METRICS_ENABLED is true
 export FORQ_ENV=pro                                                       # local|pro (default: pro)
@@ -100,7 +102,7 @@ where `{message_id}` is the `id` of the message received in the previous step.
 - [Consuming Messages](/documentation-portal/docs/guides/consuming-messages/) - How to receive and acknowledge messages
 - [Metrics](/documentation-portal/docs/guides/metrics/) - Setting up monitoring with Prometheus
 - [Admin UI Guide](/documentation-portal/docs/guides/admin-ui/) - Using the admin interface
-- [API Reference](/documentation-portal/docs/reference/api-reference/) - Complete API documentation
-- [SDKs](/documentation-portal/docs/reference/forq-sdks/) - Client libraries for various languages
-- [Forq vs Other MQs](/documentation-portal/docs/guides/forq-vs-other-message-queues/) - Comparison with other message queue systems
-- [Forq Internals](/documentation-portal/docs/guides/forq-internals/) - How (and why) Forq works under the hood for fellow nerds
+- [API Reference](/documentation-portal/docs/reference/api/) - Complete API documentation
+- [SDKs](/documentation-portal/docs/reference/sdks/) - Client libraries for various languages
+- [Forq vs Other MQs](/documentation-portal/docs/guides/forq-vs-other-mqs/) - Comparison with other message queue systems
+- [Forq Internals](/documentation-portal/docs/guides/internals/) - How (and why) Forq works under the hood for fellow nerds

@@ -1,5 +1,6 @@
 ---
 title: "Metrics"
+slug: "metrics"
 description: "Setting up monitoring with Prometheus for Forq"
 lead: "Learn how to enable and configure metrics collection in Forq using Prometheus."
 date: 2025-09-10T19:00:00+00:00

@@ -1,5 +1,6 @@
 ---
 title: "Specification"
+slug: "specification"
 description: "Overview of Forq features and design"
 lead: "Check it out to understand the design and capabilities of Forq!"
 date: 2025-09-10T19:00:00+00:00

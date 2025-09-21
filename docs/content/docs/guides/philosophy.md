@@ -1,5 +1,6 @@
 ---
 title: "Philosophy"
+slug: "philosophy"
 description: "A very short read about philosophy behind Forq to understand the design decisions"
 lead: "Helps to understand the design decisions"
 date: 2025-09-10T19:00:00+00:00

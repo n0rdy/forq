@@ -1,5 +1,6 @@
 ---
 title: "Configurations"
+slug: "configurations"
 description: "All configuration options for Forq"
 lead: "Detailed list of all configuration options available in Forq."
 date: 2025-09-10T19:00:00+00:00
@@ -28,6 +29,7 @@ However, there are a few options that can be configured via environment variable
 export FORQ_AUTH_SECRET=your-auth-secret-min-32-chars-long                # to use for API and Admin UI authentication
 
 # Optional
+export FORQ_DB_PATH=./data/forq.db                                        # Default: OS-specific location
 export FORQ_METRICS_ENABLED=false                                         # true|false (default: false)
 export FORQ_METRICS_AUTH_SECRET=your-metrics-secret-min-32-chars-long     # required if FORQ_METRICS_ENABLED is true
 export FORQ_ENV=pro                                                       # local|pro (default: pro)
@@ -61,6 +63,28 @@ export FORQ_AUTH_SECRET=your-auth-secret-min-32-chars-long
 
 - while making calls to the API, you will need to provide this secret in the `X-API-Key` header.
 - while accessing the Admin UI, you will be prompted to enter this secret.
+
+### Database Path (FORQ_DB_PATH)
+
+Set the path to the SQLite database file used by Forq to store messages and metadata. If not set, it defaults to an OS-specific location.
+Make sure that the path is writable and consistent across restarts. 
+For example, is you are using relative path, make sure you always start Forq from the same working directory.
+
+Generally, it's a good idea to set this to a specific location to avoid confusion.
+
+- **Type**: String
+- **Default**: OS-specific location
+- **Required**: No
+
+```bash
+export FORQ_DB_PATH=./data/forq.db
+```
+
+#### Recommendations:
+- if you are running Forq in a containerized environment, consider using a volume mount to persist the database file outside the container
+- ensure that the database file is not accessible from the web for security reasons
+- make sure that the directory where the database file is located exists and is writable by the user running Forq
+- if you are using a relative path, ensure that you always start Forq from the same working directory to avoid losing access to the database file, as DB will be recreated in the new working directory and empty
 
 ### Metrics Enabled (FORQ_METRICS_ENABLED)
 

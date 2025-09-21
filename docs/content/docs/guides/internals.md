@@ -1,5 +1,6 @@
 ---
 title: "Forq Internals"
+slug: "internals"
 description: "Overview of how (and why) Forq works under the hood for fellow nerds"
 lead: "An in-depth look at Forq's architecture, components, and design decisions"
 date: 2025-09-10T19:00:00+00:00

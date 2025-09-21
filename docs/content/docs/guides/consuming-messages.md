@@ -1,5 +1,6 @@
 ---
 title: "Consuming Messages"
+slug: "consuming-messages"
 description: "How to receive messages from queues"
 lead: "Learn how to consume messages from queues in Forq using the REST API."
 date: 2025-09-10T19:00:00+00:00
