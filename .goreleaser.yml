@@ -41,18 +41,44 @@ archives:
       - README.md
 
 dockers:
-  - id: forq
+  - id: forq-amd64
     image_templates:
-      - "{{ .Env.DOCKER_USERNAME }}/forq:{{ .Version }}"
-      - "{{ .Env.DOCKER_USERNAME }}/forq:latest"
+      - "{{ .Env.DOCKER_USERNAME }}/forq:{{ .Version }}-amd64"
+      - "{{ .Env.DOCKER_USERNAME }}/forq:latest-amd64"
     dockerfile: Dockerfile
     use: buildx
     build_flag_templates:
-      - --platform=linux/amd64,linux/arm64
+      - --platform=linux/amd64
       - --pull
     extra_files:
       - db/migrations
       - ui/templates
+    goos: linux
+    goarch: amd64
+  - id: forq-arm64
+    image_templates:
+      - "{{ .Env.DOCKER_USERNAME }}/forq:{{ .Version }}-arm64"
+      - "{{ .Env.DOCKER_USERNAME }}/forq:latest-arm64"
+    dockerfile: Dockerfile
+    use: buildx
+    build_flag_templates:
+      - --platform=linux/arm64
+      - --pull
+    extra_files:
+      - db/migrations
+      - ui/templates
+    goos: linux
+    goarch: arm64
+
+docker_manifests:
+  - name_template: "{{ .Env.DOCKER_USERNAME }}/forq:{{ .Version }}"
+    image_templates:
+      - "{{ .Env.DOCKER_USERNAME }}/forq:{{ .Version }}-amd64"
+      - "{{ .Env.DOCKER_USERNAME }}/forq:{{ .Version }}-arm64"
+  - name_template: "{{ .Env.DOCKER_USERNAME }}/forq:latest"
+    image_templates:
+      - "{{ .Env.DOCKER_USERNAME }}/forq:latest-amd64"
+      - "{{ .Env.DOCKER_USERNAME }}/forq:latest-arm64"
 
 checksum:
   name_template: 'checksums.txt'
