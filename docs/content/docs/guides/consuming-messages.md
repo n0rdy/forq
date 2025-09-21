@@ -19,7 +19,7 @@ Consuming messages from Forq is a two-step approach: fetch the message, and then
 
 ## API
 
-See the [API Reference](/documentation-portal/reference/api/) for the complete API documentation.
+See the [API Reference](/documentation-portal/docs/reference/api/) for the complete API documentation.
 
 ### Consume Message
 

@@ -19,7 +19,7 @@ It's not much for you to know here.
 
 ## API
 
-See the [API Reference](/documentation-portal/reference/api/) for the complete API documentation.
+See the [API Reference](/documentation-portal/docs/reference/api/) for the complete API documentation.
 
 Messages are produced to a queue using the following endpoint:
 

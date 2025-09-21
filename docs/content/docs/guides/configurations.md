@@ -70,7 +70,7 @@ Set the path to the SQLite database file used by Forq to store messages and meta
 Make sure that the path is writable and consistent across restarts. 
 For example, is you are using relative path, make sure you always start Forq from the same working directory.
 
-Generally, it's a good idea to set this to a specific location to avoid confusion.
+Generally, it's a good idea to set this env var rather than relying on the default location.
 
 - **Type**: String
 - **Default**: OS-specific location
@@ -98,7 +98,7 @@ Enable or disable Prometheus metrics endpoint. Metrics are disabled by default.
 export FORQ_METRICS_ENABLED=false  # or true
 ```
 
-Find more about metrics in the [Metrics Guide](./metrics).
+Find more about metrics in the [Metrics Guide](/documentation-portal/docs/guides/metrics/).
 
 ### Metrics Auth Secret (FORQ_METRICS_AUTH_SECRET)
 

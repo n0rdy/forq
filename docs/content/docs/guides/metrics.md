@@ -133,7 +133,7 @@ This counter increments every time a message is nacknowledged by a consumer.
 
 This counter increments every time a message is moved from a DLQ back to the main queue manually by the admin via the Admin UI.
 
-As [Admin UI guide](/docs/guides/admin-ui/) explains, this is a manual operation that requires admin privileges, 
+As [Admin UI guide](/documentation-portal/docs/guides/admin-ui/) explains, this is a manual operation that requires admin privileges, 
 where the admin can requeue either 1 message or all messages from a DLQ back to the main queue.
 
 #### Labels

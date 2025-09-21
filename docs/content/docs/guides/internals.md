@@ -362,7 +362,7 @@ All API endpoints are protected by the API key authentication that should be pro
 
 The API key is compared with the `FORQ_AUTH_SECRET` environment variable, and if they don't match, the API returns a `401 Unauthorized` response.
 
-If you checked [Getting Started](/documentation-portal/docs/getting-started/), you know that if `FORQ_AUTH_SECRET` is not set, the API will not start.
+If you checked [Getting Started](/documentation-portal/docs/guides/getting-started/), you know that if `FORQ_AUTH_SECRET` is not set, the API will not start.
 That's the only mandatory environment variable in Forq.
 Check [Configurations Guide](/documentation-portal/docs/guides/configurations/) for the full list of environment variables.
 

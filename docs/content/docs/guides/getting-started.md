@@ -57,6 +57,8 @@ export FORQ_API_ADDR=localhost:8080                                       # Defa
 export FORQ_UI_ADDR=localhost:8081                                        # Default: localhost:8081
 ```
 
+While only `FORQ_AUTH_SECRET` is required, it is recommended to set `FORQ_DB_PATH` to a persistent location.
+
 ### Running Forq
 
 ```bash
