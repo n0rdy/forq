@@ -121,8 +121,9 @@ release:
 
     **Binary releases:**
     ```bash
-    # Linux/macOS (replace with your arch)
-    curl -L https://github.com/n0rdy/forq/releases/download/{{ .Tag }}/forq_{{ title .Os }}_{{ .Arch }}.tar.gz | tar -xz
+    # Linux/macOS - download the appropriate binary for your architecture from the assets below
+    # Example for Linux x86_64:
+    curl -L https://github.com/n0rdy/forq/releases/download/{{ .Tag }}/forq_Linux_x86_64.tar.gz | tar -xz
     chmod +x forq && sudo mv forq /usr/local/bin/
     ```
 
