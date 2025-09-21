@@ -2,9 +2,10 @@ package cleanup
 
 import (
 	"context"
-	"forq/db"
-	"forq/metrics"
 	"time"
+
+	"github.com/n0rdy/forq/db"
+	"github.com/n0rdy/forq/metrics"
 
 	"github.com/rs/zerolog/log"
 )

@@ -5,11 +5,12 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"forq/common"
-	"forq/configs"
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/n0rdy/forq/common"
+	"github.com/n0rdy/forq/configs"
 
 	"github.com/rs/zerolog/log"
 	_ "modernc.org/sqlite"

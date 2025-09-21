@@ -3,12 +3,13 @@ package services
 import (
 	"context"
 	"fmt"
-	"forq/common"
-	"forq/configs"
-	"forq/db"
-	"forq/metrics"
 	"strings"
 	"time"
+
+	"github.com/n0rdy/forq/common"
+	"github.com/n0rdy/forq/configs"
+	"github.com/n0rdy/forq/db"
+	"github.com/n0rdy/forq/metrics"
 
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"

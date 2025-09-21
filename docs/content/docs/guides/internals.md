@@ -64,6 +64,8 @@ return ""
 
 I'd strongly recommend setting this variable explicitly in production, so you know where the DB file is located.
 
+Another suggestion about SQLite: while choosing the platform to host Forq, prefer SSD over HDD to get better performance.
+
 As for the UI part, I used HTMX with DaisyUI to build a simple and functional UI. Both a perfect fit for the boring tech stack.
 For example, I've learned lately that [Daisy UI has zero dependencies](https://x.com/daisyui_/status/1969088598386319591), 
 which is impressive, especially in the light oe the recent supply chain attacks in the NPM ecosystem.

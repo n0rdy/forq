@@ -2,10 +2,11 @@ package utils
 
 import (
 	"fmt"
-	"forq/common"
 	"os"
 	"path/filepath"
 	"runtime"
+
+	"github.com/n0rdy/forq/common"
 )
 
 const (

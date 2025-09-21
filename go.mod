@@ -1,4 +1,4 @@
-module forq
+module github.com/n0rdy/forq
 
 go 1.25
 

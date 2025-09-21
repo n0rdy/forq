@@ -2,8 +2,9 @@ package services
 
 import (
 	"context"
-	"forq/common"
-	"forq/db"
+
+	"github.com/n0rdy/forq/common"
+	"github.com/n0rdy/forq/db"
 )
 
 type QueuesService struct {

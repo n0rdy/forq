@@ -3,9 +3,10 @@ package api
 import (
 	"encoding/json"
 	"errors"
-	"forq/common"
-	"forq/services"
 	"net/http"
+
+	"github.com/n0rdy/forq/common"
+	"github.com/n0rdy/forq/services"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/prometheus/client_golang/prometheus/promhttp"

@@ -2,7 +2,8 @@ package services
 
 import (
 	"context"
-	"forq/db"
+
+	"github.com/n0rdy/forq/db"
 )
 
 type MonitoringService struct {

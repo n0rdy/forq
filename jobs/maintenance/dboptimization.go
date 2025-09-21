@@ -2,8 +2,9 @@ package maintenance
 
 import (
 	"context"
-	"forq/db"
 	"time"
+
+	"github.com/n0rdy/forq/db"
 )
 
 type DbOptimizationJob struct {

@@ -2,8 +2,9 @@ package api
 
 import (
 	"encoding/json"
-	"forq/common"
 	"net/http"
+
+	"github.com/n0rdy/forq/common"
 
 	"github.com/rs/zerolog/log"
 )

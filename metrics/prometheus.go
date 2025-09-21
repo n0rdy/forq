@@ -1,8 +1,9 @@
 package metrics
 
 import (
-	"forq/common"
 	"strings"
+
+	"github.com/n0rdy/forq/common"
 
 	"github.com/prometheus/client_golang/prometheus"
 )

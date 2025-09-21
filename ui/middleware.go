@@ -1,9 +1,10 @@
 package ui
 
 import (
-	"forq/common"
-	"forq/services"
 	"net/http"
+
+	"github.com/n0rdy/forq/common"
+	"github.com/n0rdy/forq/services"
 
 	"github.com/justinas/nosurf"
 )
