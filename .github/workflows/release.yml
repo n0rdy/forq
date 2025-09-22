@@ -149,7 +149,10 @@ jobs:
 
     - name: Build and push AMD64 image
       run: |
+        ls -la
         cp forq-linux-amd64 forq
+        chmod +x forq
+        ls -la forq
         docker buildx build \
           --platform linux/amd64 \
           --tag ${{ secrets.DOCKER_USERNAME }}/forq:${{ steps.version.outputs.VERSION }}-amd64 \
@@ -159,7 +162,10 @@ jobs:
 
     - name: Build and push ARM64 image
       run: |
+        ls -la
         cp forq-linux-arm64 forq
+        chmod +x forq
+        ls -la forq
         docker buildx build \
           --platform linux/arm64 \
           --tag ${{ secrets.DOCKER_USERNAME }}/forq:${{ steps.version.outputs.VERSION }}-arm64 \
