@@ -16,7 +16,7 @@ site/
 test_data_large.sql
 
 # Build artifacts
-forq
+# forq - temporarily commented out for CI/CD Docker builds
 
 # Benchmarks
 benchmarks/
