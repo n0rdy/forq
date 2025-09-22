@@ -194,7 +194,7 @@ jobs:
       with:
         distribution: goreleaser
         version: '~> v2'
-        args: release --skip=build
+        args: release --skip=before
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
