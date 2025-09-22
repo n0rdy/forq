@@ -26,6 +26,9 @@ jobs:
         go-version: '1.25'
         cache: true
 
+    - name: Install SQLite development headers
+      run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
+
     - name: Test GoReleaser config
       uses: goreleaser/goreleaser-action@v6
       with:
@@ -54,6 +57,9 @@ jobs:
       with:
         go-version: '1.25'
         cache: true
+
+    - name: Install SQLite development headers
+      run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
 
     - name: Set up QEMU
       uses: docker/setup-qemu-action@v3

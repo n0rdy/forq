@@ -11,11 +11,9 @@ builds:
     binary: forq
     main: ./
     env:
-      - CGO_ENABLED=0
+      - CGO_ENABLED=1
     goos:
       - linux
-      - darwin
-      - windows
     goarch:
       - amd64
       - arm64
@@ -24,9 +22,6 @@ builds:
       - -X main.version={{.Version}}
       - -X main.commit={{.Commit}}
       - -X main.date={{.Date}}
-    ignore:
-      - goos: windows
-        goarch: arm64
 
 archives:
   - id: forq
@@ -119,12 +114,22 @@ release:
 
     ### Installation
 
-    **Binary releases:**
+    **Binary releases (Linux only):**
     ```bash
-    # Linux/macOS - download the appropriate binary for your architecture from the assets below
+    # Download for your architecture from the assets below
     # Example for Linux x86_64:
     curl -L https://github.com/n0rdy/forq/releases/download/{{ .Tag }}/forq_Linux_x86_64.tar.gz | tar -xz
     chmod +x forq && sudo mv forq /usr/local/bin/
+
+    # Example for Linux ARM64:
+    curl -L https://github.com/n0rdy/forq/releases/download/{{ .Tag }}/forq_Linux_arm64.tar.gz | tar -xz
+    chmod +x forq && sudo mv forq /usr/local/bin/
+    ```
+
+    **Other platforms:**
+    ```bash
+    # macOS/Windows users can build from source or use Docker
+    git clone https://github.com/n0rdy/forq && cd forq && go build
     ```
 
     **Docker:**

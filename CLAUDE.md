@@ -38,6 +38,12 @@ cd docs && npm run build        # Production build
 cd docs && npm run clean        # Clean build artifacts
 ```
 
+### Platform Support
+
+**Production**: Linux binaries (optimized for performance)
+**Development**: Docker available for all platforms
+**Other platforms**: Build from source with `go build`
+
 ### Docker
 ```bash
 docker run -d \

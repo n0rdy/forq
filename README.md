@@ -55,6 +55,9 @@ docker run -d \
 - `FORQ_API_ADDR=0.0.0.0:8080` - Binds API to all interfaces (required for Docker port mapping)
 - `FORQ_UI_ADDR=0.0.0.0:8081` - Binds UI to all interfaces (required for Docker port mapping)
 
+Please, note that if you are running Forq via Docker on macOS, the performance will be significantly worse due to Docker's filesystem performance issues on macOS.
+I'd advise against running Forq on macOS via Docker in production. Binary always gives the best performance.
+
 ### Configuration
 
 Forq uses environment variables for configuration:

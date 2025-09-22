@@ -1,8 +1,8 @@
 # Runtime stage (GoReleaser provides the binary)
 FROM alpine:latest
 
-# Install runtime dependencies
-RUN apk add --no-cache ca-certificates
+# Install runtime dependencies (including SQLite for CGO)
+RUN apk add --no-cache ca-certificates sqlite
 
 # Create app user
 RUN addgroup -g 1001 -S forq && \

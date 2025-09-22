@@ -12,8 +12,8 @@ import (
 	"github.com/n0rdy/forq/common"
 	"github.com/n0rdy/forq/configs"
 
+	_ "github.com/mattn/go-sqlite3"
 	"github.com/rs/zerolog/log"
-	_ "modernc.org/sqlite"
 )
 
 type ForqRepo struct {
@@ -24,7 +24,7 @@ type ForqRepo struct {
 
 func NewSQLiteRepo(dbPath string, appConfigs *configs.AppConfigs) (*ForqRepo, error) {
 	// Create read connection with multiple connections for concurrent reads
-	dbRead, err := sql.Open("sqlite", applyConnectionSettings(dbPath, false))
+	dbRead, err := sql.Open("sqlite3", applyConnectionSettings(dbPath, false))
 	if err != nil {
 		return nil, err
 	}
@@ -40,7 +40,7 @@ func NewSQLiteRepo(dbPath string, appConfigs *configs.AppConfigs) (*ForqRepo, er
 	// Create write connection with single connection to serialize writes
 	// we are running optimizations pragma ONLY on the write connection, as it might lock the database for a while
 	// and our read flow doesn't expect any locks.
-	dbWrite, err := sql.Open("sqlite", applyConnectionSettings(dbPath, true))
+	dbWrite, err := sql.Open("sqlite3", applyConnectionSettings(dbPath, true))
 	if err != nil {
 		dbRead.Close()
 		return nil, err
@@ -348,12 +348,12 @@ func (fr *ForqRepo) UpdateStaleMessages(ctx context.Context) (int64, error) {
         WHERE status = ? AND processing_started_at < ?;`
 
 	res, err := fr.dbWrite.ExecContext(ctx, query,
-		fr.appConfigs.MaxDeliveryAttempts, // WHEN attempts >= ? (status check)
-		common.FailedStatus,               // THEN ?  			-- failed if no more attempts left
-		common.ReadyStatus,                // ELSE ?			-- ready if there are attempts left
-		nowMs,                             // process_after = ? -- immediate retry
-		nowMs,                             // updated_at = ?
-		common.ProcessingStatus,           // WHERE status = ?
+		fr.appConfigs.MaxDeliveryAttempts,       // WHEN attempts >= ? (status check)
+		common.FailedStatus,                     // THEN ?  			-- failed if no more attempts left
+		common.ReadyStatus,                      // ELSE ?			-- ready if there are attempts left
+		nowMs,                                   // process_after = ? -- immediate retry
+		nowMs,                                   // updated_at = ?
+		common.ProcessingStatus,                 // WHERE status = ?
 		nowMs-fr.appConfigs.MaxProcessingTimeMs, // AND processing_started_at < ?;
 	)
 	if err != nil {
