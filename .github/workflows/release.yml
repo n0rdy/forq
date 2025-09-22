@@ -29,20 +29,12 @@ jobs:
     - name: Install SQLite development headers
       run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
 
-    - name: Test GoReleaser config
-      uses: goreleaser/goreleaser-action@v6
-      with:
-        distribution: goreleaser
-        version: '~> v2'
-        args: check
+    - name: Test build
+      run: go build -v .
 
-    - name: Test build (snapshot)
-      uses: goreleaser/goreleaser-action@v6
-      with:
-        distribution: goreleaser
-        version: '~> v2'
-        args: build --snapshot --clean
-  
+    - name: Run tests
+      run: go test -v ./...
+
   build-amd64:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
@@ -61,21 +53,25 @@ jobs:
     - name: Install SQLite development headers
       run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
 
-    - name: Build AMD64
-      uses: goreleaser/goreleaser-action@v6
-      with:
-        distribution: goreleaser
-        version: '~> v2'
-        args: build --single-target --snapshot --clean
-      env:
-        GOOS: linux
-        GOARCH: amd64
+    - name: Build AMD64 binary
+      run: |
+        CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build \
+          -ldflags="-s -w -X main.version=${{ github.ref_name }} -X main.commit=${{ github.sha }} -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+          -o forq-linux-amd64 .
+
+    - name: Create AMD64 archive
+      run: |
+        mkdir -p dist
+        tar -czf dist/forq_Linux_x86_64.tar.gz forq-linux-amd64 LICENSE README.md
+        sha256sum dist/forq_Linux_x86_64.tar.gz > dist/forq_Linux_x86_64.tar.gz.sha256
 
     - name: Upload AMD64 artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: dist-amd64
-        path: dist/
+        name: amd64-release
+        path: |
+          dist/
+          forq-linux-amd64
 
   build-arm64:
     if: github.event_name != 'pull_request'
@@ -95,50 +91,45 @@ jobs:
     - name: Install SQLite development headers
       run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
 
-    - name: Build ARM64
-      uses: goreleaser/goreleaser-action@v6
-      with:
-        distribution: goreleaser
-        version: '~> v2'
-        args: build --single-target --snapshot --clean
-      env:
-        GOOS: linux
-        GOARCH: arm64
+    - name: Build ARM64 binary
+      run: |
+        CGO_ENABLED=1 GOOS=linux GOARCH=arm64 go build \
+          -ldflags="-s -w -X main.version=${{ github.ref_name }} -X main.commit=${{ github.sha }} -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+          -o forq-linux-arm64 .
+
+    - name: Create ARM64 archive
+      run: |
+        mkdir -p dist
+        tar -czf dist/forq_Linux_arm64.tar.gz forq-linux-arm64 LICENSE README.md
+        sha256sum dist/forq_Linux_arm64.tar.gz > dist/forq_Linux_arm64.tar.gz.sha256
 
     - name: Upload ARM64 artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: dist-arm64
-        path: dist/
+        name: arm64-release
+        path: |
+          dist/
+          forq-linux-arm64
 
-  release:
+  docker:
     if: github.event_name != 'pull_request'
     needs: [build-amd64, build-arm64]
     runs-on: ubuntu-latest
     steps:
     - name: Checkout repository
       uses: actions/checkout@v5
-      with:
-        fetch-depth: 0
-
-    - name: Set up Go
-      uses: actions/setup-go@v6
-      with:
-        go-version: '1.25'
-        cache: true
 
     - name: Download AMD64 artifacts
       uses: actions/download-artifact@v4
       with:
-        name: dist-amd64
-        path: dist/
+        name: amd64-release
+        path: ./
 
     - name: Download ARM64 artifacts
       uses: actions/download-artifact@v4
       with:
-        name: dist-arm64
-        path: dist/
-        merge-multiple: true
+        name: arm64-release
+        path: ./
 
     - name: Set up QEMU
       uses: docker/setup-qemu-action@v3
@@ -152,12 +143,144 @@ jobs:
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_TOKEN }}
 
-    - name: Release with pre-built binaries
-      uses: goreleaser/goreleaser-action@v6
+    - name: Extract version
+      id: version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+    - name: Build and push AMD64 image
+      run: |
+        cp forq-linux-amd64 forq
+        docker buildx build \
+          --platform linux/amd64 \
+          --tag ${{ secrets.DOCKER_USERNAME }}/forq:${{ steps.version.outputs.VERSION }}-amd64 \
+          --tag ${{ secrets.DOCKER_USERNAME }}/forq:latest-amd64 \
+          --push \
+          .
+
+    - name: Build and push ARM64 image
+      run: |
+        cp forq-linux-arm64 forq
+        docker buildx build \
+          --platform linux/arm64 \
+          --tag ${{ secrets.DOCKER_USERNAME }}/forq:${{ steps.version.outputs.VERSION }}-arm64 \
+          --tag ${{ secrets.DOCKER_USERNAME }}/forq:latest-arm64 \
+          --push \
+          .
+
+    - name: Create and push multi-arch manifests
+      run: |
+        # Create version manifest
+        docker manifest create ${{ secrets.DOCKER_USERNAME }}/forq:${{ steps.version.outputs.VERSION }} \
+          ${{ secrets.DOCKER_USERNAME }}/forq:${{ steps.version.outputs.VERSION }}-amd64 \
+          ${{ secrets.DOCKER_USERNAME }}/forq:${{ steps.version.outputs.VERSION }}-arm64
+        docker manifest push ${{ secrets.DOCKER_USERNAME }}/forq:${{ steps.version.outputs.VERSION }}
+
+        # Create latest manifest
+        docker manifest create ${{ secrets.DOCKER_USERNAME }}/forq:latest \
+          ${{ secrets.DOCKER_USERNAME }}/forq:latest-amd64 \
+          ${{ secrets.DOCKER_USERNAME }}/forq:latest-arm64
+        docker manifest push ${{ secrets.DOCKER_USERNAME }}/forq:latest
+
+  release:
+    if: github.event_name != 'pull_request'
+    needs: [build-amd64, build-arm64, docker]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v5
       with:
-        distribution: goreleaser
-        version: '~> v2'
-        args: release --skip=before
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+        fetch-depth: 0
+
+    - name: Download AMD64 artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: amd64-release
+        path: ./amd64/
+
+    - name: Download ARM64 artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: arm64-release
+        path: ./arm64/
+
+    - name: Prepare release assets
+      run: |
+        mkdir -p release
+        cp amd64/dist/* release/
+        cp arm64/dist/* release/
+
+        # Create combined checksums file
+        cd release
+        cat *.sha256 > checksums.txt
+        ls -la
+
+    - name: Extract version
+      id: version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+    - name: Generate changelog
+      id: changelog
+      run: |
+        if [ "${{ steps.version.outputs.VERSION }}" != "v0.0.1" ]; then
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -n "$PREV_TAG" ]; then
+            echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
+            echo "## Changes since $PREV_TAG" >> $GITHUB_OUTPUT
+            echo "" >> $GITHUB_OUTPUT
+            git log --oneline $PREV_TAG..HEAD | sed 's/^/- /' >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "CHANGELOG=Initial release" >> $GITHUB_OUTPUT
+          fi
+        else
+          echo "CHANGELOG=Initial release" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ steps.version.outputs.VERSION }}
+        name: Forq ${{ steps.version.outputs.VERSION }}
+        body: |
+          ## Forq ${{ steps.version.outputs.VERSION }}
+
+          ${{ steps.changelog.outputs.CHANGELOG }}
+
+          ### Installation
+
+          **Binary releases (Linux only):**
+          ```bash
+          # Download for your architecture from the assets below
+          # Example for Linux x86_64:
+          curl -L https://github.com/n0rdy/forq/releases/download/${{ steps.version.outputs.VERSION }}/forq_Linux_x86_64.tar.gz | tar -xz
+          chmod +x forq-linux-amd64 && sudo mv forq-linux-amd64 /usr/local/bin/forq
+
+          # Example for Linux ARM64:
+          curl -L https://github.com/n0rdy/forq/releases/download/${{ steps.version.outputs.VERSION }}/forq_Linux_arm64.tar.gz | tar -xz
+          chmod +x forq-linux-arm64 && sudo mv forq-linux-arm64 /usr/local/bin/forq
+          ```
+
+          **Other platforms:**
+          ```bash
+          # macOS/Windows users can build from source or use Docker
+          git clone https://github.com/n0rdy/forq && cd forq && go build
+          ```
+
+          **Docker:**
+          ```bash
+          docker run -d \
+            --name forq \
+            --restart unless-stopped \
+            -e FORQ_AUTH_SECRET=your-auth-secret-min-32-chars-long \
+            -e FORQ_DB_PATH=/app/data/forq/forq.db \
+            -e FORQ_API_ADDR=0.0.0.0:8080 \
+            -e FORQ_UI_ADDR=0.0.0.0:8081 \
+            -p 8080:8080 \
+            -p 8081:8081 \
+            -v ~/forq-data:/app/data/forq \
+            ${{ secrets.DOCKER_USERNAME }}/forq:${{ steps.version.outputs.VERSION }}
+          ```
+        files: |
+          release/*
+        draft: false
+        prerelease: false
