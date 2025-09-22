@@ -147,45 +147,37 @@ jobs:
       id: version
       run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
-    - name: Build and push AMD64 image
+    - name: Build and push multi-arch image
       run: |
-        ls -la
-        cp forq-linux-amd64 forq
-        chmod +x forq
-        ls -la forq
+        cp forq-linux-amd64 forq-amd64
+        cp forq-linux-arm64 forq-arm64
+
+        # Create multi-arch Dockerfile
+        cat > Dockerfile.multiarch << 'EOF'
+        FROM alpine:latest
+        RUN apk add --no-cache ca-certificates sqlite
+        RUN addgroup -g 1001 -S forq && adduser -u 1001 -S forq -G forq
+        WORKDIR /app
+        ARG TARGETARCH
+        COPY forq-${TARGETARCH} forq
+        RUN chmod +x forq
+        COPY db/migrations ./db/migrations
+        COPY ui/templates ./ui/templates
+        RUN chown -R forq:forq /app
+        USER forq
+        EXPOSE 8080 8081
+        ENV FORQ_ENV=pro
+        CMD ["./forq"]
+        EOF
+
+        # Build and push multi-arch image
         docker buildx build \
-          --platform linux/amd64 \
-          --tag ${{ secrets.DOCKER_USERNAME }}/forq:${{ steps.version.outputs.VERSION }}-amd64 \
-          --tag ${{ secrets.DOCKER_USERNAME }}/forq:latest-amd64 \
+          --platform linux/amd64,linux/arm64 \
+          --file Dockerfile.multiarch \
+          --tag ${{ secrets.DOCKER_USERNAME }}/forq:${{ steps.version.outputs.VERSION }} \
+          --tag ${{ secrets.DOCKER_USERNAME }}/forq:latest \
           --push \
           .
-
-    - name: Build and push ARM64 image
-      run: |
-        ls -la
-        cp forq-linux-arm64 forq
-        chmod +x forq
-        ls -la forq
-        docker buildx build \
-          --platform linux/arm64 \
-          --tag ${{ secrets.DOCKER_USERNAME }}/forq:${{ steps.version.outputs.VERSION }}-arm64 \
-          --tag ${{ secrets.DOCKER_USERNAME }}/forq:latest-arm64 \
-          --push \
-          .
-
-    - name: Create and push multi-arch manifests
-      run: |
-        # Create version manifest
-        docker manifest create ${{ secrets.DOCKER_USERNAME }}/forq:${{ steps.version.outputs.VERSION }} \
-          ${{ secrets.DOCKER_USERNAME }}/forq:${{ steps.version.outputs.VERSION }}-amd64 \
-          ${{ secrets.DOCKER_USERNAME }}/forq:${{ steps.version.outputs.VERSION }}-arm64
-        docker manifest push ${{ secrets.DOCKER_USERNAME }}/forq:${{ steps.version.outputs.VERSION }}
-
-        # Create latest manifest
-        docker manifest create ${{ secrets.DOCKER_USERNAME }}/forq:latest \
-          ${{ secrets.DOCKER_USERNAME }}/forq:latest-amd64 \
-          ${{ secrets.DOCKER_USERNAME }}/forq:latest-arm64
-        docker manifest push ${{ secrets.DOCKER_USERNAME }}/forq:latest
 
   release:
     if: github.event_name != 'pull_request'
