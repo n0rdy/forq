@@ -170,12 +170,14 @@ jobs:
         name: forq-arm64
         path: dist-arm64/
 
-    - name: Merge artifacts
+    - name: Merge artifacts properly
       run: |
+        ls -la dist-amd64/ dist-arm64/
         mkdir -p dist
-        cp -r dist-amd64/* dist/ 2>/dev/null || true
-        cp -r dist-arm64/* dist/ 2>/dev/null || true
+        cp -r dist-amd64/* dist/
+        cp -r dist-arm64/* dist/
         rm -rf dist-amd64 dist-arm64
+        find dist/ -name "forq*" -type f
         ls -la dist/
 
     - name: Set up QEMU
@@ -195,7 +197,7 @@ jobs:
       with:
         distribution: goreleaser
         version: '~> v2'
-        args: release --skip=before
+        args: release --config .goreleaser-release.yml --clean
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
