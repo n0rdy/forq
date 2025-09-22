@@ -175,6 +175,7 @@ jobs:
         mkdir -p dist
         cp -r dist-amd64/* dist/ 2>/dev/null || true
         cp -r dist-arm64/* dist/ 2>/dev/null || true
+        rm -rf dist-amd64 dist-arm64
         ls -la dist/
 
     - name: Set up QEMU
