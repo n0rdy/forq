@@ -2,9 +2,18 @@ version: 2
 
 project_name: forq
 
-# Skip builds entirely - we'll use pre-built artifacts
+# Use pre-built artifacts from dist/
 builds:
-  - skip: true
+  - id: forq-amd64
+    binary: forq
+    goos: [linux]
+    goarch: [amd64]
+    skip: true
+  - id: forq-arm64
+    binary: forq
+    goos: [linux]
+    goarch: [arm64]
+    skip: true
 
 archives:
   - id: forq
@@ -19,11 +28,12 @@ archives:
       - README.md
 
 dockers:
-  - id: forq-amd64
+  - id: docker-amd64
+    ids: [forq-amd64]
     image_templates:
       - "{{ .Env.DOCKER_USERNAME }}/forq:{{ .Version }}-amd64"
       - "{{ .Env.DOCKER_USERNAME }}/forq:latest-amd64"
-    dockerfile: Dockerfile
+    dockerfile: Dockerfile.amd64
     use: buildx
     build_flag_templates:
       - --platform=linux/amd64
@@ -31,13 +41,15 @@ dockers:
     extra_files:
       - db/migrations
       - ui/templates
+      - forq-amd64
     goos: linux
     goarch: amd64
-  - id: forq-arm64
+  - id: docker-arm64
+    ids: [forq-arm64]
     image_templates:
       - "{{ .Env.DOCKER_USERNAME }}/forq:{{ .Version }}-arm64"
       - "{{ .Env.DOCKER_USERNAME }}/forq:latest-arm64"
-    dockerfile: Dockerfile
+    dockerfile: Dockerfile.arm64
     use: buildx
     build_flag_templates:
       - --platform=linux/arm64
@@ -45,6 +57,7 @@ dockers:
     extra_files:
       - db/migrations
       - ui/templates
+      - forq-arm64
     goos: linux
     goarch: arm64
 
