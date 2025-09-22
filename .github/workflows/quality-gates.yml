@@ -50,7 +50,7 @@ jobs:
       - name: Build application
         run: go build -v ./...
 
-      # Placeholder for when you add tests
+      # Placeholder tests
       # - name: Run tests
       #   run: go test -v ./...
 
