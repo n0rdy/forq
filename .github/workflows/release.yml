@@ -223,7 +223,7 @@ jobs:
     - name: Generate changelog
       id: changelog
       run: |
-        if [ "${{ steps.version.outputs.FULL_VERSION }}" != "v0.0.1" ]; then
+        if [ "${{ steps.version.outputs.VERSION }}" != "0.0.1" ]; then
           PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
           if [ -n "$PREV_TAG" ]; then
             echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
@@ -242,9 +242,9 @@ jobs:
       uses: softprops/action-gh-release@v2
       with:
         tag_name: ${{ steps.version.outputs.FULL_VERSION }}
-        name: Forq ${{ steps.version.outputs.FULL_VERSION }}
+        name: ${{ steps.version.outputs.FULL_VERSION }}
         body: |
-          ## Forq ${{ steps.version.outputs.FULL_VERSION }}
+          ## ${{ steps.version.outputs.FULL_VERSION }}
 
           ${{ steps.changelog.outputs.CHANGELOG }}
 
