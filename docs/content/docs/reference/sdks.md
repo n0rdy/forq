@@ -20,10 +20,10 @@ I implemented simple Forq SDKs for the ecosystems that I use most often, which i
 - Java
 - TypeScript
 
-Those a very simple, and basically just wrap the HTTP API. 
+Those are very simple, and basically just wrap the HTTP API. 
 
 If your platform of choice is not listed here, you can generate the client code using the [Forq OpenAPI specification](https://github.com/n0rdy/forq/blob/main/openapi.yaml),
-or just use the HTTP API directly. It's 4 endpoint, and 3 models, no big deal.
+or just use the HTTP API directly. The whole API consists of 4 endpoint and 3 models, no big deal.
 
 ## Go SDK
 

@@ -145,7 +145,9 @@ jobs:
 
     - name: Extract version
       id: version
-      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      run: |
+        echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+        echo "FULL_VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
     - name: Build and push multi-arch image
       run: |
@@ -214,12 +216,14 @@ jobs:
 
     - name: Extract version
       id: version
-      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      run: |
+        echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+        echo "FULL_VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
     - name: Generate changelog
       id: changelog
       run: |
-        if [ "${{ steps.version.outputs.VERSION }}" != "v0.0.1" ]; then
+        if [ "${{ steps.version.outputs.FULL_VERSION }}" != "v0.0.1" ]; then
           PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
           if [ -n "$PREV_TAG" ]; then
             echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
@@ -237,10 +241,10 @@ jobs:
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: ${{ steps.version.outputs.VERSION }}
-        name: Forq ${{ steps.version.outputs.VERSION }}
+        tag_name: ${{ steps.version.outputs.FULL_VERSION }}
+        name: Forq ${{ steps.version.outputs.FULL_VERSION }}
         body: |
-          ## Forq ${{ steps.version.outputs.VERSION }}
+          ## Forq ${{ steps.version.outputs.FULL_VERSION }}
 
           ${{ steps.changelog.outputs.CHANGELOG }}
 
@@ -250,11 +254,11 @@ jobs:
           ```bash
           # Download for your architecture from the assets below
           # Example for Linux x86_64:
-          curl -L https://github.com/n0rdy/forq/releases/download/${{ steps.version.outputs.VERSION }}/forq_Linux_x86_64.tar.gz | tar -xz
+          curl -L https://github.com/n0rdy/forq/releases/download/${{ steps.version.outputs.FULL_VERSION }}/forq_Linux_x86_64.tar.gz | tar -xz
           chmod +x forq-linux-amd64 && sudo mv forq-linux-amd64 /usr/local/bin/forq
 
           # Example for Linux ARM64:
-          curl -L https://github.com/n0rdy/forq/releases/download/${{ steps.version.outputs.VERSION }}/forq_Linux_arm64.tar.gz | tar -xz
+          curl -L https://github.com/n0rdy/forq/releases/download/${{ steps.version.outputs.FULL_VERSION }}/forq_Linux_arm64.tar.gz | tar -xz
           chmod +x forq-linux-arm64 && sudo mv forq-linux-arm64 /usr/local/bin/forq
           ```
 

@@ -1,6 +1,8 @@
 # Forq - Simple Message Queue powered by SQLite
 
-Forq is a simple single-binary message queue on top of SQLite, designed for small to medium workloads.
+Forq is a simple single-binary message queue on top of SQLite, designed for small to medium workloads. Shipped with the Admin UI for easy management.
+
+![Forq Admin UI Screenshot](https://raw.githubusercontent.com/n0rdy/forq/refs/heads/main/site/assets/images/banner-light.png)
 
 The assumption is that you will self-host Forq on a VPS or a small cloud instance, and use it for background jobs, task queues, or inter-service communication.
 
@@ -115,16 +117,29 @@ curl -X POST http://localhost:8080/api/v1/queues/emails/messages/{message_id}/ac
 
 where `{message_id}` is the `id` of the message received in the previous step.
 
+## SDKs
+
+I implemented simple Forq SDKs for the ecosystems that I use most often:
+
+- [Go](https://github.com/n0rdy/forq-sdk-go)
+- [Java](https://github.com/n0rdy/forq-sdk-java)
+- [TypeScript](https://github.com/n0rdy/forq-sdk-typescript)
+
+Those are very simple, and basically just wrap the HTTP API.
+
+If your platform of choice is not listed here, you can generate the client code using the [Forq OpenAPI specification](https://github.com/n0rdy/forq/blob/main/openapi.yaml),
+or just use the HTTP API directly. The whole API consists of 4 endpoint and 3 models, no big deal.
+
 ## Next Steps
 
-- [Philosophy](/documentation-portal/docs/guides/philosophy/) - A very short read about philosophy behind Forq. Helps to understand the design decisions.
-- [Specification](/documentation-portal/docs/guides/specification/) - Overview of Forq features and design, do check it out!
-- [Configurations](/documentation-portal/docs/guides/configurations/) - All configuration options
-- [Producing Messages](/documentation-portal/docs/guides/producing-messages/) - How to send messages to queues
-- [Consuming Messages](/documentation-portal/docs/guides/consuming-messages/) - How to receive and acknowledge messages
-- [Metrics](/documentation-portal/docs/guides/metrics/) - Setting up monitoring with Prometheus
-- [Admin UI Guide](/documentation-portal/docs/guides/admin-ui/) - Using the admin interface
-- [API Reference](/documentation-portal/docs/reference/api/) - Complete API documentation
-- [SDKs](/documentation-portal/docs/reference/sdks/) - Client libraries for various languages
-- [Forq vs Other MQs](/documentation-portal/docs/guides/forq-vs-other-mqs/) - Comparison with other message queue systems
-- [Forq Internals](/documentation-portal/docs/guides/internals/) - How (and why) Forq works under the hood for fellow nerds
+- [Philosophy](https://forq.sh/documentation-portal/docs/guides/philosophy/) - A very short read about philosophy behind Forq. Helps to understand the design decisions.
+- [Specification](https://forq.sh/documentation-portal/docs/guides/specification/) - Overview of Forq features and design, do check it out!
+- [Configurations](https://forq.sh/documentation-portal/docs/guides/configurations/) - All configuration options
+- [Producing Messages](https://forq.sh/documentation-portal/docs/guides/producing-messages/) - How to send messages to queues
+- [Consuming Messages](https://forq.sh/documentation-portal/docs/guides/consuming-messages/) - How to receive and acknowledge messages
+- [Metrics](https://forq.sh/documentation-portal/docs/guides/metrics/) - Setting up monitoring with Prometheus
+- [Admin UI Guide](https://forq.sh/documentation-portal/docs/guides/admin-ui/) - Using the admin interface
+- [API Reference](https://forq.sh/documentation-portal/docs/reference/api/) - Complete API documentation
+- [SDKs](https://forq.sh/documentation-portal/docs/reference/sdks/) - Client libraries for various languages
+- [Forq vs Other MQs](https://forq.sh/documentation-portal/docs/guides/forq-vs-other-mqs/) - Comparison with other message queue systems
+- [Forq Internals](https://forq.sh/documentation-portal/docs/guides/internals/) - How (and why) Forq works under the hood for fellow nerds
