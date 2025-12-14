@@ -66,7 +66,7 @@ jobs:
         sha256sum dist/forq_Linux_x86_64.tar.gz > dist/forq_Linux_x86_64.tar.gz.sha256
 
     - name: Upload AMD64 artifacts
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v6
       with:
         name: amd64-release
         path: |
@@ -104,7 +104,7 @@ jobs:
         sha256sum dist/forq_Linux_arm64.tar.gz > dist/forq_Linux_arm64.tar.gz.sha256
 
     - name: Upload ARM64 artifacts
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v6
       with:
         name: arm64-release
         path: |
@@ -120,13 +120,13 @@ jobs:
       uses: actions/checkout@v6
 
     - name: Download AMD64 artifacts
-      uses: actions/download-artifact@v6
+      uses: actions/download-artifact@v7
       with:
         name: amd64-release
         path: ./
 
     - name: Download ARM64 artifacts
-      uses: actions/download-artifact@v6
+      uses: actions/download-artifact@v7
       with:
         name: arm64-release
         path: ./
@@ -192,13 +192,13 @@ jobs:
         fetch-depth: 0
 
     - name: Download AMD64 artifacts
-      uses: actions/download-artifact@v6
+      uses: actions/download-artifact@v7
       with:
         name: amd64-release
         path: ./amd64/
 
     - name: Download ARM64 artifacts
-      uses: actions/download-artifact@v6
+      uses: actions/download-artifact@v7
       with:
         name: arm64-release
         path: ./arm64/
