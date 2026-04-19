@@ -7,7 +7,7 @@ require (
 	github.com/golang-migrate/migrate/v4 v4.19.1
 	github.com/google/uuid v1.6.0
 	github.com/justinas/nosurf v1.2.0
-	github.com/mattn/go-sqlite3 v1.14.40
+	github.com/mattn/go-sqlite3 v1.14.42
 	github.com/prometheus/client_golang v1.23.2
 	github.com/rs/zerolog v1.35.0
 )
