@@ -6,11 +6,12 @@ import (
 )
 
 const (
-	throttlingWindowMs  = 60 * 1000      // sliding window for counting failures
-	throttlingMaxFails  = 5              // failures within window that trigger a lockout
-	throttlingLockoutMs = 60 * 1000      // lockout duration after threshold reached
-	throttlingSweepMs   = 5 * 60 * 1000  // background cleanup interval
-	throttlingStaleMs   = 10 * 60 * 1000 // entries idle this long are removed
+	throttlingWindowMs   = 60 * 1000      // sliding window for counting failures
+	throttlingMaxFails   = 5              // failures within window that trigger a lockout
+	throttlingLockoutMs  = 60 * 1000      // lockout duration after threshold reached
+	throttlingSweepMs    = 5 * 60 * 1000  // background cleanup interval
+	throttlingStaleMs    = 10 * 60 * 1000 // entries idle this long are removed
+	throttlingMaxEntries = 10000          // hard cap on tracked IPs; oldest evicted on overflow
 )
 
 type throttlingEntry struct {
@@ -79,6 +80,9 @@ func (ts *ThrottlingService) RecordFailure(ip string) {
 
 	e, ok := ts.entries[ip]
 	if !ok {
+		if len(ts.entries) >= throttlingMaxEntries {
+			ts.evictOldestEntryLocked()
+		}
 		e = &throttlingEntry{}
 		ts.entries[ip] = e
 	}
@@ -99,6 +103,23 @@ func (ts *ThrottlingService) RecordFailure(ip string) {
 		// would re-trigger a lock on the very first post-lockout failure.
 		e.failures = e.failures[:0]
 	}
+}
+
+// evictOldestEntryLocked removes the entry with the smallest lastSeenMs.
+// Used as a memory-DoS guard when the entry map hits its hard cap. Caller
+// must hold ts.mu.
+func (ts *ThrottlingService) evictOldestEntryLocked() {
+	var oldestIP string
+	var oldestMs int64
+	first := true
+	for ip, e := range ts.entries {
+		if first || e.lastSeenMs < oldestMs {
+			oldestMs = e.lastSeenMs
+			oldestIP = ip
+			first = false
+		}
+	}
+	delete(ts.entries, oldestIP)
 }
 
 func (ts *ThrottlingService) Close() error {
