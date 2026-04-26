@@ -46,10 +46,10 @@ func init() {
 	}
 }
 
-func apiKeyTokenAuth(authSecret string, throttlingService *services.ThrottlingService) func(http.Handler) http.Handler {
+func apiKeyTokenAuth(authSecret string, throttlingService *services.ThrottlingService, trustProxyHeaders bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			ip := common.ClientIP(req)
+			ip := common.ClientIP(req, trustProxyHeaders)
 			if throttlingService.IsLocked(ip) {
 				sendTooManyRequestsResponse(w)
 				return

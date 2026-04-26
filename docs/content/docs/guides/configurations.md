@@ -37,6 +37,7 @@ export FORQ_QUEUE_TTL_HOURS=24                                            # Defa
 export FORQ_DLQ_TTL_HOURS=168                                             # Default: 168 hours (7 days)
 export FORQ_API_ADDR=localhost:8080                                       # Default: localhost:8080
 export FORQ_UI_ADDR=localhost:8081                                        # Default: localhost:8081
+export FORQ_TRUST_PROXY_HEADERS=false                                     # true|false (default: false) - set to true if running behind a reverse proxy
 ```
 
 ## Detailed Explanation
@@ -208,3 +209,30 @@ export FORQ_UI_ADDR=localhost:8081
 - ensure that this port is accessible from your browser if you're accessing the Admin UI remotely
 - make sure that the UI address is different from the API address to avoid port conflicts
 - API and UI can use the same host, just different ports
+
+### Trust Proxy Headers (FORQ_TRUST_PROXY_HEADERS)
+
+Controls how Forq determines the client IP for login throttling and API key throttling.
+
+- **Type**: Boolean
+- **Default**: false
+- **Required**: No
+
+```bash
+export FORQ_TRUST_PROXY_HEADERS=false  # or true
+```
+
+#### Behavior:
+
+- **`false` (default)**: Forq uses the direct connection's source address (`RemoteAddr`) as the client IP. Correct when Forq is exposed directly to clients.
+- **`true`**: Forq reads the rightmost entry of `X-Forwarded-For` (or `X-Real-IP` if absent) as the client IP, falling back to `RemoteAddr` if neither header is present or valid. Required when Forq runs behind a reverse proxy — otherwise every request appears to come from the proxy's IP and one bad client can lock everyone out.
+
+#### When to enable:
+
+- You run Forq behind nginx, Caddy, Traefik, HAProxy, a cloud load balancer, or any other reverse proxy that adds `X-Forwarded-For`.
+
+#### Security warning:
+
+- **Only enable this when Forq is actually behind a trusted reverse proxy.** If Forq is reachable directly without a proxy in front, attackers can spoof the `X-Forwarded-For` header to make their requests appear to come from any IP, bypassing throttling entirely.
+- Your proxy must strip or replace any incoming `X-Forwarded-For` header from clients before forwarding. nginx, Caddy, Traefik, and most cloud load balancers do this correctly by default — verify your configuration if in doubt.
+- This setting assumes a single proxy hop in front of Forq. Multi-proxy chains (CDN → load balancer → Forq) should be canonicalized at the edge proxy: have your innermost proxy set a single trusted header (e.g. `X-Real-IP`) to the real client IP, regardless of what was forwarded earlier in the chain.

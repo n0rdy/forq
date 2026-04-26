@@ -77,6 +77,7 @@ export FORQ_QUEUE_TTL_HOURS=24                                            # Defa
 export FORQ_DLQ_TTL_HOURS=168                                             # Default: 168 hours (7 days)
 export FORQ_API_ADDR=localhost:8080                                       # Default: localhost:8080
 export FORQ_UI_ADDR=localhost:8081                                        # Default: localhost:8081
+export FORQ_TRUST_PROXY_HEADERS=false                                     # true|false (default: false) - set to true if running behind a reverse proxy
 ```
 
 ### Running Forq
