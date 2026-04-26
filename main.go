@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"sync"
 
@@ -19,7 +20,6 @@ import (
 	"github.com/n0rdy/forq/metrics"
 	"github.com/n0rdy/forq/services"
 	"github.com/n0rdy/forq/ui"
-	"github.com/n0rdy/forq/utils"
 
 	_ "github.com/golang-migrate/migrate/v4/database/sqlite"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
@@ -39,11 +39,7 @@ func main() {
 	queueTtlHours, dlqTtlHours := getTtlConfigs()
 	apiAddr, uiAddr := getServerAddrs()
 
-	dbPath, err := getDbPath()
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to get or create default database path")
-		panic(err)
-	}
+	dbPath := getDbPath()
 	log.Info().Msgf("using database file at: %s", dbPath)
 
 	runMigrations(dbPath)
@@ -53,7 +49,6 @@ func main() {
 	repo, err := db.NewSQLiteRepo(dbPath, appConfigs)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to create SQLite repository")
-		panic(err)
 	}
 	defer repo.Close()
 
@@ -176,7 +171,6 @@ func getEnv() string {
 
 	if !common.SupportedEnvs[env] {
 		log.Fatal().Msgf("unsupported environment: %s", env)
-		panic(fmt.Sprintf("unsupported environment: %s", env))
 	}
 	return env
 }
@@ -185,11 +179,9 @@ func getAuthSecret() string {
 	authSecret := os.Getenv("FORQ_AUTH_SECRET")
 	if authSecret == "" {
 		log.Fatal().Msg("auth secret is not provided: set FORQ_AUTH_SECRET environment variable")
-		panic("auth secret is not provided: set FORQ_AUTH_SECRET environment variable")
 	}
 	if len(authSecret) < minAuthSecretLength {
 		log.Fatal().Msgf("auth secret is too short: must be at least %d characters", minAuthSecretLength)
-		panic(fmt.Sprintf("auth secret is too short: must be at least %d characters", minAuthSecretLength))
 	}
 	return authSecret
 }
@@ -203,7 +195,6 @@ func getMetricsConfigs() (bool, string) {
 	metricsEnabled, err := strconv.ParseBool(metricsEnabledEnv)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to parse FORQ_METRICS_ENABLED env var")
-		panic(err)
 	}
 
 	if !metricsEnabled {
@@ -213,11 +204,9 @@ func getMetricsConfigs() (bool, string) {
 	metricsAuthSecret := os.Getenv("FORQ_METRICS_AUTH_SECRET")
 	if metricsAuthSecret == "" {
 		log.Fatal().Msg("FORQ_METRICS_AUTH_SECRET env var is required when metrics are enabled")
-		panic("FORQ_METRICS_AUTH_SECRET env var is required when metrics are enabled")
 	}
 	if len(metricsAuthSecret) < minAuthSecretLength {
 		log.Fatal().Msgf("metrics auth secret is too short: must be at least %d characters", minAuthSecretLength)
-		panic(fmt.Sprintf("metrics auth secret is too short: must be at least %d characters", minAuthSecretLength))
 	}
 	return true, metricsAuthSecret
 }
@@ -234,11 +223,9 @@ func getTtlConfigs() (int, int) {
 		parsed, err := strconv.Atoi(queueTtlEnv)
 		if err != nil {
 			log.Fatal().Err(err).Msg("failed to parse FORQ_QUEUE_TTL_HOURS env var")
-			panic(err)
 		}
 		if parsed < 1 {
 			log.Fatal().Msg("FORQ_QUEUE_TTL_HOURS must be at least 1 hour")
-			panic("FORQ_QUEUE_TTL_HOURS must be at least 1 hour")
 		}
 		queueTtlHours = parsed
 	}
@@ -247,11 +234,9 @@ func getTtlConfigs() (int, int) {
 		parsed, err := strconv.Atoi(dlqTtlEnv)
 		if err != nil {
 			log.Fatal().Err(err).Msg("failed to parse FORQ_DLQ_TTL_HOURS env var")
-			panic(err)
 		}
 		if parsed < 1 {
 			log.Fatal().Msg("FORQ_DLQ_TTL_HOURS must be at least 1 hour")
-			panic("FORQ_DLQ_TTL_HOURS must be at least 1 hour")
 		}
 		dlqTtlHours = parsed
 	}
@@ -273,12 +258,22 @@ func getServerAddrs() (string, string) {
 	return apiAddr, uiAddr
 }
 
-func getDbPath() (string, error) {
+func getDbPath() string {
 	dbPath := os.Getenv("FORQ_DB_PATH")
 	if dbPath == "" {
-		return utils.GetOrCreateDefaultDBPath()
+		log.Fatal().Msg("database path is not provided: set FORQ_DB_PATH environment variable")
 	}
-	return dbPath, nil
+
+	absPath, err := filepath.Abs(dbPath)
+	if err != nil {
+		log.Fatal().Err(err).Msgf("failed to resolve absolute path for FORQ_DB_PATH=%s", dbPath)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(absPath), 0755); err != nil {
+		log.Fatal().Err(err).Msgf("failed to create directory for database file at %s", absPath)
+	}
+
+	return absPath
 }
 
 func runMigrations(dbPath string) {
@@ -289,7 +284,6 @@ func runMigrations(dbPath string) {
 	m, err := migrate.New("file://db/migrations", dbURL)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to create migration instance")
-		panic(err)
 	}
 
 	err = m.Up()
@@ -299,7 +293,6 @@ func runMigrations(dbPath string) {
 			return
 		}
 		log.Fatal().Err(err).Msg("failed to run migrations")
-		panic(fmt.Errorf("failed to run migrations: %w", err))
 	} else {
 		log.Info().Msg("migrations applied successfully")
 	}
