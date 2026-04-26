@@ -124,6 +124,8 @@ func (ur *Router) processLogout(w http.ResponseWriter, req *http.Request) {
 		Path:     "/",
 		MaxAge:   -1, // delete the cookie
 		HttpOnly: true,
+		Secure:   ur.env == common.ProEnv,
+		SameSite: http.SameSiteLaxMode,
 	})
 
 	// redirects to login page
