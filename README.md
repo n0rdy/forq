@@ -23,7 +23,7 @@ If you find any bugs, have questions or suggestions, use the `Discussions` secti
 
 ### Prerequisites
 
-- Go 1.25+ (for building from source)
+- Go 1.26+ (for building from source)
 - Or use Docker
 
 ### Installation

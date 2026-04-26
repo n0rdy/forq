@@ -25,7 +25,7 @@ While Forq has a limited set of features compared to more complex systems like R
 
 ### Prerequisites
 
-- Go 1.25+ (for building from source)
+- Go 1.26+ (for building from source)
 - Or use Docker
 
 ### Installation
