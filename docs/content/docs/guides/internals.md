@@ -1124,7 +1124,7 @@ This is the [Better-Auth](https://www.better-auth.com/) school of design: don't 
 
 Why rightmost specifically? Because that's where the proxy *appends* the connecting client's IP. The XFF chain format is `client, intermediate1, intermediate2`, where rightmost is closest to us. With one trusted proxy hop in front of Forq, the rightmost entry is the actual client. Picking leftmost is the spoofable choice - anyone can prepend an entry to XFF before the request ever hits your proxy. Picking rightmost is what nginx, Rails, Express, and every "trust the trusted layer" framework does.
 
-Here is the code from `common/http.go`:
+Here is the code from `utils/http.go`:
 
 ```go
 func ClientIP(req *http.Request, trustProxyHeaders bool) string {
