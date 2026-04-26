@@ -5,12 +5,33 @@ import (
 	"net/http"
 
 	"github.com/n0rdy/forq/common"
+	"github.com/n0rdy/forq/services"
 
 	"github.com/rs/zerolog/log"
 )
 
+// securityHeaders middleware sets HTTP security headers on every API response.
+// API responses aren't browser-rendered, so CSP is omitted; the rest are
+// cheap defense-in-depth in case a response ever ends up loaded by a browser
+// (e.g. error pages opened directly).
+func securityHeaders(env string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			h := w.Header()
+			h.Set("X-Content-Type-Options", "nosniff")
+			h.Set("X-Frame-Options", "DENY")
+			h.Set("Referrer-Policy", "no-referrer")
+			if env == common.ProEnv {
+				h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+			}
+			next.ServeHTTP(w, req)
+		})
+	}
+}
+
 var (
-	unauthorizedRespBody []byte
+	unauthorizedRespBody    []byte
+	tooManyRequestsRespBody []byte
 )
 
 func init() {
@@ -19,13 +40,24 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
+	tooManyRequestsRespBody, err = json.Marshal(common.ErrorResponse{Code: common.ErrCodeTooManyRequests})
+	if err != nil {
+		panic(err)
+	}
 }
 
-func apiKeyTokenAuth(authSecret string) func(http.Handler) http.Handler {
+func apiKeyTokenAuth(authSecret string, throttlingService *services.ThrottlingService) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			ip := common.ClientIP(req)
+			if throttlingService.IsLocked(ip) {
+				sendTooManyRequestsResponse(w)
+				return
+			}
+
 			authHeader := req.Header.Get("X-API-Key")
 			if authHeader != authSecret {
+				throttlingService.RecordFailure(ip)
 				log.Error().Msg("Invalid API key")
 				sendUnauthorizedErrorResponse(w)
 				return
@@ -37,6 +69,12 @@ func apiKeyTokenAuth(authSecret string) func(http.Handler) http.Handler {
 
 func sendUnauthorizedErrorResponse(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(401)
+	w.WriteHeader(http.StatusUnauthorized)
 	w.Write(unauthorizedRespBody)
+}
+
+func sendTooManyRequestsResponse(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusTooManyRequests)
+	w.Write(tooManyRequestsRespBody)
 }

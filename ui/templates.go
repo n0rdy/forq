@@ -3,7 +3,6 @@ package ui
 import (
 	"html/template"
 	"net/http"
-	"path/filepath"
 	"strings"
 
 	"github.com/justinas/nosurf"
@@ -23,10 +22,9 @@ func init() {
 	}
 
 	templates = template.New("").Funcs(funcMap)
-	templates, err = templates.ParseGlob(filepath.Join("ui", "templates", "*.html"))
+	templates, err = templates.ParseFS(templatesFS, "templates/*.html")
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to parse templates")
-		panic(err)
 	}
 }
 

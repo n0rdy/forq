@@ -11,31 +11,34 @@ import (
 )
 
 type Router struct {
-	messagesService *services.MessagesService
-	sessionsService *services.SessionsService
-	queuesService   *services.QueuesService
-	authSecret      string
-	env             string
+	messagesService   *services.MessagesService
+	sessionsService   *services.SessionsService
+	queuesService     *services.QueuesService
+	throttlingService *services.ThrottlingService
+	authSecret        string
+	env               string
 }
 
-func NewRouter(messagesService *services.MessagesService, sessionsService *services.SessionsService, queuesService *services.QueuesService, authSecret string, env string) *Router {
+func NewRouter(messagesService *services.MessagesService, sessionsService *services.SessionsService, queuesService *services.QueuesService, throttlingService *services.ThrottlingService, authSecret string, env string) *Router {
 	return &Router{
-		messagesService: messagesService,
-		sessionsService: sessionsService,
-		queuesService:   queuesService,
-		authSecret:      authSecret,
-		env:             env,
+		messagesService:   messagesService,
+		sessionsService:   sessionsService,
+		queuesService:     queuesService,
+		throttlingService: throttlingService,
+		authSecret:        authSecret,
+		env:               env,
 	}
 }
 
 func (ur *Router) NewRouter() *chi.Mux {
 	router := chi.NewRouter()
 
+	router.Use(securityHeaders(ur.env))
 	router.Use(csrfPrevention(ur.csrfErrorHandler, ur.env))
 
-	// unprotected login routes:
+	// unprotected login routes (throttled):
 	router.Get("/login", ur.loginPage)
-	router.Post("/login", ur.processLogin)
+	router.With(loginThrottle(ur.throttlingService)).Post("/login", ur.processLogin)
 
 	// protected routes:
 	router.With(sessionAuth(ur.sessionsService)).
@@ -80,6 +83,7 @@ func (ur *Router) processLogin(w http.ResponseWriter, req *http.Request) {
 
 	token := req.FormValue("token")
 	if token != ur.authSecret {
+		ur.throttlingService.RecordFailure(common.ClientIP(req))
 		log.Error().Msg("Invalid login token")
 		data := common.LoginPageData{
 			Title: "Login",
@@ -96,7 +100,7 @@ func (ur *Router) processLogin(w http.ResponseWriter, req *http.Request) {
 		Value:    sessionId,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   req.TLS != nil, // Only secure if HTTPS
+		Secure:   ur.env == common.ProEnv,
 		SameSite: http.SameSiteLaxMode,
 	})
 
