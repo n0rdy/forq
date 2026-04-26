@@ -6,6 +6,7 @@ import (
 
 	"github.com/n0rdy/forq/common"
 	"github.com/n0rdy/forq/services"
+	"github.com/n0rdy/forq/utils"
 
 	"github.com/justinas/nosurf"
 )
@@ -49,7 +50,7 @@ func securityHeaders(env string) func(http.Handler) http.Handler {
 func loginThrottle(throttlingService *services.ThrottlingService, trustProxyHeaders bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			ip := common.ClientIP(req, trustProxyHeaders)
+			ip := utils.ClientIP(req, trustProxyHeaders)
 			if throttlingService.IsLocked(ip) {
 				data := common.LoginPageData{
 					Title: "Login",

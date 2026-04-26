@@ -6,28 +6,10 @@ import (
 
 	"github.com/n0rdy/forq/common"
 	"github.com/n0rdy/forq/services"
+	"github.com/n0rdy/forq/utils"
 
 	"github.com/rs/zerolog/log"
 )
-
-// securityHeaders middleware sets HTTP security headers on every API response.
-// API responses aren't browser-rendered, so CSP is omitted; the rest are
-// cheap defense-in-depth in case a response ever ends up loaded by a browser
-// (e.g. error pages opened directly).
-func securityHeaders(env string) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			h := w.Header()
-			h.Set("X-Content-Type-Options", "nosniff")
-			h.Set("X-Frame-Options", "DENY")
-			h.Set("Referrer-Policy", "no-referrer")
-			if env == common.ProEnv {
-				h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
-			}
-			next.ServeHTTP(w, req)
-		})
-	}
-}
 
 var (
 	unauthorizedRespBody    []byte
@@ -49,7 +31,7 @@ func init() {
 func apiKeyTokenAuth(authSecret string, throttlingService *services.ThrottlingService, trustProxyHeaders bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			ip := common.ClientIP(req, trustProxyHeaders)
+			ip := utils.ClientIP(req, trustProxyHeaders)
 			if throttlingService.IsLocked(ip) {
 				sendTooManyRequestsResponse(w)
 				return
@@ -61,6 +43,25 @@ func apiKeyTokenAuth(authSecret string, throttlingService *services.ThrottlingSe
 				log.Error().Msg("Invalid API key")
 				sendUnauthorizedErrorResponse(w)
 				return
+			}
+			next.ServeHTTP(w, req)
+		})
+	}
+}
+
+// securityHeaders middleware sets HTTP security headers on every API response.
+// API responses aren't browser-rendered, so CSP is omitted; the rest are
+// cheap defense-in-depth in case a response ever ends up loaded by a browser
+// (e.g. error pages opened directly).
+func securityHeaders(env string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			h := w.Header()
+			h.Set("X-Content-Type-Options", "nosniff")
+			h.Set("X-Frame-Options", "DENY")
+			h.Set("Referrer-Policy", "no-referrer")
+			if env == common.ProEnv {
+				h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 			}
 			next.ServeHTTP(w, req)
 		})
