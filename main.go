@@ -53,7 +53,7 @@ func main() {
 	}
 	defer repo.Close()
 
-	monirotingService := services.NewMonitoringService(repo)
+	monitoringService := services.NewMonitoringService(repo)
 	metricsService := metrics.NewMetricsService(metricsEnabled)
 	queuesService := services.NewQueuesService(repo)
 	messagesService := services.NewMessagesService(metricsService, repo, appConfigs)
@@ -83,7 +83,7 @@ func main() {
 	shutdownCh := make(chan struct{})
 	var shutdownOnce sync.Once
 
-	apiRouter := api.NewRouter(monirotingService, messagesService, throttlingService, authSecret, metricsEnabled, metricsAuthSecret, env, trustProxyHeaders)
+	apiRouter := api.NewRouter(monitoringService, messagesService, throttlingService, authSecret, metricsEnabled, metricsAuthSecret, env, trustProxyHeaders)
 
 	var apiProtocols http.Protocols
 	apiProtocols.SetUnencryptedHTTP2(true)
@@ -199,8 +199,8 @@ func getTrustProxyHeaders() bool {
 		log.Fatal().Err(err).Msg("failed to parse FORQ_TRUST_PROXY_HEADERS env var")
 	}
 	if trust {
-		log.Warn().Msg("FORQ_TRUST_PROXY_HEADERS=true: client IP will be read from X-Forwarded-For / X-Real-IP. " +
-			"Forq MUST be behind a reverse proxy that strips or replaces incoming forwarded headers from clients, " +
+		log.Warn().Msg("FORQ_TRUST_PROXY_HEADERS=true: client IP will be read from X-Forwarded-For. " +
+			"Forq MUST be behind a reverse proxy that strips or replaces incoming X-Forwarded-For from clients, " +
 			"otherwise IPs are spoofable and throttling can be bypassed.")
 	}
 	return trust

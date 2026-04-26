@@ -225,7 +225,7 @@ export FORQ_TRUST_PROXY_HEADERS=false  # or true
 #### Behavior:
 
 - **`false` (default)**: Forq uses the direct connection's source address (`RemoteAddr`) as the client IP. Correct when Forq is exposed directly to clients.
-- **`true`**: Forq reads the rightmost entry of `X-Forwarded-For` (or `X-Real-IP` if absent) as the client IP, falling back to `RemoteAddr` if neither header is present or valid. Required when Forq runs behind a reverse proxy — otherwise every request appears to come from the proxy's IP and one bad client can lock everyone out.
+- **`true`**: Forq reads the rightmost entry of `X-Forwarded-For` as the client IP, falling back to `RemoteAddr` if the header is absent or malformed. Required when Forq runs behind a reverse proxy, otherwise every request appears to come from the proxy's IP and one bad client can lock everyone out.
 
 #### When to enable:
 
@@ -234,5 +234,5 @@ export FORQ_TRUST_PROXY_HEADERS=false  # or true
 #### Security warning:
 
 - **Only enable this when Forq is actually behind a trusted reverse proxy.** If Forq is reachable directly without a proxy in front, attackers can spoof the `X-Forwarded-For` header to make their requests appear to come from any IP, bypassing throttling entirely.
-- Your proxy must strip or replace any incoming `X-Forwarded-For` header from clients before forwarding. nginx, Caddy, Traefik, and most cloud load balancers do this correctly by default — verify your configuration if in doubt.
-- This setting assumes a single proxy hop in front of Forq. Multi-proxy chains (CDN → load balancer → Forq) should be canonicalized at the edge proxy: have your innermost proxy set a single trusted header (e.g. `X-Real-IP`) to the real client IP, regardless of what was forwarded earlier in the chain.
+- Your proxy must strip or replace any incoming `X-Forwarded-For` header from clients before forwarding. nginx, Caddy, Traefik, and most cloud load balancers do this correctly by default, but verify your configuration if in doubt.
+- This setting assumes a single proxy hop in front of Forq. Multi-proxy chains (CDN, then load balancer, then Forq) should be canonicalized at the edge: have your innermost proxy overwrite `X-Forwarded-For` with the real client IP before forwarding to Forq, regardless of what was forwarded earlier in the chain.

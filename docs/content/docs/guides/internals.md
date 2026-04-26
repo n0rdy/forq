@@ -1118,7 +1118,7 @@ The naive fix is to read `X-Forwarded-For` always. The naive fix has its own foo
 So Forq treats this as the operator's call:
 
 - **Default (`FORQ_TRUST_PROXY_HEADERS` unset or `false`)**: use `RemoteAddr` only. Safe for direct exposure, broken behind a proxy.
-- **`FORQ_TRUST_PROXY_HEADERS=true`**: read the rightmost entry of `X-Forwarded-For` (or `X-Real-IP` if XFF is absent), fall back to `RemoteAddr` on missing or malformed values. The operator is promising that Forq is behind a proxy that strips/replaces incoming forwarded headers from clients.
+- **`FORQ_TRUST_PROXY_HEADERS=true`**: read the rightmost entry of `X-Forwarded-For`, fall back to `RemoteAddr` on missing or malformed values. The operator is promising that Forq is behind a proxy that strips or replaces incoming `X-Forwarded-For` from clients.
 
 This is the [Better-Auth](https://www.better-auth.com/) school of design: don't try to detect the deployment, let the operator declare it. The configuration becomes a one-line opt-in instead of a CIDR-list-with-IPv6-edge-cases-and-multi-hop-rules thing.
 
@@ -1133,11 +1133,6 @@ func ClientIP(req *http.Request, trustProxyHeaders bool) string {
             parts := strings.Split(xff, ",")
             rightmost := strings.TrimSpace(parts[len(parts)-1])
             if ip := net.ParseIP(rightmost); ip != nil {
-                return ip.String()
-            }
-        }
-        if xri := strings.TrimSpace(req.Header.Get("X-Real-IP")); xri != "" {
-            if ip := net.ParseIP(xri); ip != nil {
                 return ip.String()
             }
         }
@@ -1189,6 +1184,7 @@ A few things I considered and didn't ship:
 
 - **Per-route rate limiting beyond auth.** Throttling targets auth failures, not general request rate. If you need per-client request limits, do it at the proxy layer (nginx `limit_req_zone`, Caddy `rate_limit`, etc.).
 - **Trusted-proxy CIDR list / multi-hop XFF parsing.** Discussed above. Not in the audience's deployment shape.
+- **`X-Real-IP` and RFC 7239 `Forwarded` headers.** `X-Real-IP` is an nginx-ism; every proxy that sets it also sets `X-Forwarded-For`, so trusting it as well only adds another spoofable surface for zero practical gain. `Forwarded` is the RFC-blessed standard, but in practice none of the proxies Forq is recommended behind (nginx, Caddy, Traefik, HAProxy, AWS ALB, Cloudflare, GCP LB) emit it by default - parsing a header that nobody sends is dead code. If you really need `Forwarded`, every proxy in existence can be configured to set XFF instead, one line away.
 - **TLS termination in Forq itself.** Forq speaks HTTP and unencrypted HTTP/2 (H2C). TLS is the proxy's job. See the Consumer API section above for the reasoning.
 
 Alright, this covers security. Let me briefly mention the Admin UI before wrapping up.
