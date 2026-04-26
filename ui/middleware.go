@@ -21,6 +21,8 @@ func securityHeaders(env string) func(http.Handler) http.Handler {
 		"img-src 'self' data:",
 		"font-src 'self' https://cdn.jsdelivr.net data:",
 		"connect-src 'self'",
+		"object-src 'none'",
+		"frame-src 'none'",
 		"frame-ancestors 'none'",
 		"base-uri 'self'",
 		"form-action 'self'",
@@ -53,8 +55,7 @@ func loginThrottle(throttlingService *services.ThrottlingService) func(http.Hand
 					Title: "Login",
 					Error: "Too many failed login attempts. Try again in a minute.",
 				}
-				w.WriteHeader(http.StatusTooManyRequests)
-				RenderTemplate(w, req, "login.html", data)
+				RenderTemplateWithStatus(w, req, http.StatusTooManyRequests, "login.html", data)
 				return
 			}
 			next.ServeHTTP(w, req)

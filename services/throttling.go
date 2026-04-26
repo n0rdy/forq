@@ -26,6 +26,7 @@ type ThrottlingService struct {
 	entries map[string]*throttlingEntry
 	mu      sync.Mutex
 	ticker  *time.Ticker
+	done    chan struct{}
 }
 
 func NewThrottlingService() *ThrottlingService {
@@ -34,19 +35,25 @@ func NewThrottlingService() *ThrottlingService {
 	ts := &ThrottlingService{
 		entries: make(map[string]*throttlingEntry),
 		ticker:  ticker,
+		done:    make(chan struct{}),
 	}
 
 	go func() {
-		for now := range ticker.C {
-			nowMs := now.UnixMilli()
-			cutoff := nowMs - throttlingStaleMs
-			ts.mu.Lock()
-			for ip, e := range ts.entries {
-				if e.lastSeenMs < cutoff && nowMs >= e.lockedUntil {
-					delete(ts.entries, ip)
+		for {
+			select {
+			case now := <-ticker.C:
+				nowMs := now.UnixMilli()
+				cutoff := nowMs - throttlingStaleMs
+				ts.mu.Lock()
+				for ip, e := range ts.entries {
+					if e.lastSeenMs < cutoff && nowMs >= e.lockedUntil {
+						delete(ts.entries, ip)
+					}
 				}
+				ts.mu.Unlock()
+			case <-ts.done:
+				return
 			}
-			ts.mu.Unlock()
 		}
 	}()
 
@@ -87,10 +94,15 @@ func (ts *ThrottlingService) RecordFailure(ip string) {
 
 	if len(e.failures) >= throttlingMaxFails {
 		e.lockedUntil = now + throttlingLockoutMs
+		// Clear failures so the next window starts with a fresh budget once the
+		// lockout expires; otherwise old timestamps inside the sliding window
+		// would re-trigger a lock on the very first post-lockout failure.
+		e.failures = e.failures[:0]
 	}
 }
 
 func (ts *ThrottlingService) Close() error {
 	ts.ticker.Stop()
+	close(ts.done)
 	return nil
 }
