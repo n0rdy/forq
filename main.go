@@ -22,9 +22,9 @@ import (
 	"github.com/n0rdy/forq/ui"
 
 	_ "github.com/golang-migrate/migrate/v4/database/sqlite"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
 
 	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/rs/zerolog/log"
 )
 
@@ -58,6 +58,8 @@ func main() {
 	messagesService := services.NewMessagesService(metricsService, repo, appConfigs)
 	sessionsService := services.NewSessionsService()
 	defer sessionsService.Close()
+	throttlingService := services.NewThrottlingService()
+	defer throttlingService.Close()
 
 	expiredMessagesCleanupJob := cleanup.NewExpiredMessagesCleanupJob(metricsService, repo, appConfigs.JobsIntervals.ExpiredMessagesCleanupMs)
 	defer expiredMessagesCleanupJob.Close()
@@ -80,7 +82,7 @@ func main() {
 	shutdownCh := make(chan struct{})
 	var shutdownOnce sync.Once
 
-	apiRouter := api.NewRouter(monirotingService, messagesService, authSecret, metricsEnabled, metricsAuthSecret)
+	apiRouter := api.NewRouter(monirotingService, messagesService, throttlingService, authSecret, metricsEnabled, metricsAuthSecret, env)
 
 	var apiProtocols http.Protocols
 	apiProtocols.SetUnencryptedHTTP2(true)
@@ -96,7 +98,7 @@ func main() {
 		Protocols:         &apiProtocols,
 	}
 
-	uiRouter := ui.NewRouter(messagesService, sessionsService, queuesService, authSecret, env)
+	uiRouter := ui.NewRouter(messagesService, sessionsService, queuesService, throttlingService, authSecret, env)
 
 	var uiProtocols http.Protocols
 	uiProtocols.SetUnencryptedHTTP2(true)
@@ -281,7 +283,12 @@ func runMigrations(dbPath string) {
 	// https://github.com/golang-migrate/migrate/issues/346
 	dbURL := fmt.Sprintf("sqlite://file:%s?cache=shared&mode=rwc&x-no-tx-wrap=true", dbPath)
 
-	m, err := migrate.New("file://db/migrations", dbURL)
+	source, err := iofs.New(db.MigrationsFS, "migrations")
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to create migrations source")
+	}
+
+	m, err := migrate.NewWithSourceInstance("iofs", source, dbURL)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to create migration instance")
 	}

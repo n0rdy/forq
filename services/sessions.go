@@ -15,6 +15,7 @@ type SessionsService struct {
 	activeSessions map[string]int64
 	mu             sync.RWMutex
 	ticker         *time.Ticker
+	done           chan struct{}
 }
 
 func NewSessionsService() *SessionsService {
@@ -24,17 +25,23 @@ func NewSessionsService() *SessionsService {
 		activeSessions: make(map[string]int64),
 		mu:             sync.RWMutex{},
 		ticker:         ticker,
+		done:           make(chan struct{}),
 	}
 
 	go func() {
-		for now := range ticker.C {
-			ss.mu.Lock()
-			for sessionId, expiry := range ss.activeSessions {
-				if expiry < now.UnixMilli() {
-					delete(ss.activeSessions, sessionId)
+		for {
+			select {
+			case now := <-ticker.C:
+				ss.mu.Lock()
+				for sessionId, expiry := range ss.activeSessions {
+					if expiry < now.UnixMilli() {
+						delete(ss.activeSessions, sessionId)
+					}
 				}
+				ss.mu.Unlock()
+			case <-ss.done:
+				return
 			}
-			ss.mu.Unlock()
 		}
 	}()
 
@@ -72,5 +79,6 @@ func (ss *SessionsService) InvalidateSession(sessionId string) {
 
 func (ss *SessionsService) Close() error {
 	ss.ticker.Stop()
+	close(ss.done)
 	return nil
 }

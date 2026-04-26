@@ -16,42 +16,50 @@ import (
 type Router struct {
 	monitoringService *services.MonitoringService
 	messagesService   *services.MessagesService
+	throttlingService *services.ThrottlingService
 	authSecret        string
 	metricsEnabled    bool
 	metricsAuthSecret string
+	env               string
 }
 
 func NewRouter(
 	monitoringService *services.MonitoringService,
 	messagesService *services.MessagesService,
+	throttlingService *services.ThrottlingService,
 	authSecret string,
 	metricsEnabled bool,
 	metricsAuthSecret string,
+	env string,
 ) *Router {
 	return &Router{
 		monitoringService: monitoringService,
 		messagesService:   messagesService,
+		throttlingService: throttlingService,
 		authSecret:        authSecret,
 		metricsEnabled:    metricsEnabled,
 		metricsAuthSecret: metricsAuthSecret,
+		env:               env,
 	}
 }
 
 func (ar *Router) NewRouter() *chi.Mux {
 	router := chi.NewRouter()
 
+	router.Use(securityHeaders(ar.env))
+
 	router.Get("/healthcheck", ar.healthcheck)
 
 	if ar.metricsEnabled {
 		router.Route("/metrics", func(r chi.Router) {
-			r.Use(apiKeyTokenAuth(ar.metricsAuthSecret))
+			r.Use(apiKeyTokenAuth(ar.metricsAuthSecret, ar.throttlingService))
 
 			r.Get("/", promhttp.Handler().ServeHTTP)
 		})
 	}
 
 	router.Route("/api/v1", func(r chi.Router) {
-		r.Use(apiKeyTokenAuth(ar.authSecret))
+		r.Use(apiKeyTokenAuth(ar.authSecret, ar.throttlingService))
 
 		r.Route("/queues", func(r chi.Router) {
 			r.Route("/{queue}/messages", func(r chi.Router) {

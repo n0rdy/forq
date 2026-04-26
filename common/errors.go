@@ -7,6 +7,7 @@ const (
 	ErrCodeBadRequestInvalidBody         = "bad_request.body.invalid"
 	ErrCodeBadRequestDlqOnlyOp           = "bad_request.dlq_only_operation"
 	ErrCodeUnauthorized                  = "unauthorized"
+	ErrCodeTooManyRequests               = "too_many_requests"
 	ErrCodeNotFoundMessage               = "not_found.message"
 	ErrCodeServiceUnhealthy              = "forq.unhealthy"
 	ErrCodeInternal                      = "internal"

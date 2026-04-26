@@ -1,9 +1,9 @@
 package ui
 
 import (
+	"bytes"
 	"html/template"
 	"net/http"
-	"path/filepath"
 	"strings"
 
 	"github.com/justinas/nosurf"
@@ -23,34 +23,40 @@ func init() {
 	}
 
 	templates = template.New("").Funcs(funcMap)
-	templates, err = templates.ParseGlob(filepath.Join("ui", "templates", "*.html"))
+	templates, err = templates.ParseFS(templatesFS, "templates/*.html")
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to parse templates")
-		panic(err)
 	}
 }
 
-// RenderTemplate renders a template with the given data and CSRF token
+// RenderTemplate renders a template with the given data and CSRF token, status 200.
 func RenderTemplate(w http.ResponseWriter, req *http.Request, templateName string, data interface{}) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	RenderTemplateWithStatus(w, req, http.StatusOK, templateName, data)
+}
 
-	// Create template data that includes both the original data and CSRF token
+// RenderTemplateWithStatus renders into a buffer first so a render failure can
+// still surface as a 500 response with no partial body written.
+func RenderTemplateWithStatus(w http.ResponseWriter, req *http.Request, status int, templateName string, data interface{}) {
 	templateData := map[string]interface{}{
 		"Data":      data,
 		"CSRFToken": nosurf.Token(req),
 	}
 
-	// If data is already a map, merge its fields to top level for convenience
 	if dataMap, ok := data.(map[string]interface{}); ok {
 		for key, value := range dataMap {
 			templateData[key] = value
 		}
 	}
 
-	err := templates.ExecuteTemplate(w, templateName, templateData)
+	var buf bytes.Buffer
+	err := templates.ExecuteTemplate(&buf, templateName, templateData)
 	if err != nil {
 		log.Error().Err(err).Str("template", templateName).Msg("Failed to render template")
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(status)
+	w.Write(buf.Bytes())
 }
