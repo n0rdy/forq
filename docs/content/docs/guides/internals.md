@@ -30,7 +30,7 @@ Further in this guide, I'll show that a lot of Forq logic is built around SQLite
 I always try to rely on the standard library as much as possible, but for some things, I had to use third-party libraries. 
 Check the [go.mod](https://github.com/n0rdy/forq/blob/main/go.mod) for the full up-to-date list.
 
-Since SQLite is a file-based DB, the file must be located somewhere. You configure that via the required `FORQ_DB_PATH` environment variable — Forq refuses to start without it. This is intentional: Forq used to fall back to an OS-specific default location, but that was easy to forget about and could lead to two separate DB files if you later passed the env var pointing somewhere else. Making the path explicit removes that footgun and keeps state ownership in your hands.
+Since SQLite is a file-based DB, the file must be located somewhere. You configure that via the required `FORQ_DB_PATH` environment variable - Forq refuses to start without it. This is intentional: Forq used to fall back to an OS-specific default location, but that was easy to forget about and could lead to two separate DB files if you later passed the env var pointing somewhere else. Making the path explicit removes that footgun and keeps state ownership in your hands.
 
 Another suggestion about SQLite: while choosing the platform to host Forq, prefer SSD over HDD to get better performance.
 
@@ -55,6 +55,8 @@ The green boxes represent the Forq service, which consists of:
 - (Optional) Prometheus metrics if enabled.
 
 All of this is a single binary (or a Docker container) that you can run on your server.
+
+Speaking of single binary - DB migrations and HTML templates are bundled into the executable via Go's `embed.FS` rather than shipped as files alongside it. So `forq` truly is one self-contained file: deploy the binary, set the env vars, and you're done. No "did you also copy the migrations folder?" footguns.
 
 The dark boxes and arrows represent the external clients that interact with Forq:
 - Producers, which send messages to the queues via the API.
@@ -1045,7 +1047,151 @@ At this point, I believe that creating a separate index for this query is an ove
 
 Let me know if metrics are too slow for you, and I might look into it again.
 
-Alright, this covers the background jobs section. Let me briefly mention the Admin UI before wrapping up.
+Alright, this covers the background jobs section. Let's cover security topics next, then briefly touch on the Admin UI before wrapping up.
+
+## Security
+
+This is one of those cross-cutting concerns that touches both the API and the Admin UI. The basics are already covered above: API uses the `X-API-Key` header, Admin UI has session-based auth with CSRF protection. Let me cover the rest in one place - throttling, how Forq figures out the client IP, and the security headers we ship by default.
+
+### Throttling
+
+Even with a 32+ character `FORQ_AUTH_SECRET`, leaving login endpoints completely unthrottled is a smell. Yes, brute-forcing a 32-char random secret online is impractical, but throttling helps against credential-stuffing scanners, slows down probing, and bounds the noise an attacker can make before the proxy's rate limiter notices.
+
+Forq tracks failed authentication attempts per IP and locks out IPs that exceed a threshold within a sliding window. Defaults: 5 failures within 1 minute trigger a 1-minute lockout. After the lockout expires, the IP gets a fresh budget of 5 attempts. None of these are configurable - opinionated as always.
+
+The throttling is shared between the UI login form and the API key auth - same auth secret, same protection bucket. If you fail 5 times via the API and then try the UI login, you're already locked out. Intentional: a brute-force attack on Forq doesn't care which entry point it uses.
+
+Let me show you the data structure from `services/throttling.go`:
+
+```go
+type throttlingEntry struct {
+    failures    []int64 // timestamps of recent failures (ms)
+    lockedUntil int64   // when the current lockout expires (ms)
+    lastSeenMs  int64   // last activity, used for stale eviction
+}
+
+type ThrottlingService struct {
+    entries map[string]*throttlingEntry
+    mu      sync.Mutex
+    ticker  *time.Ticker
+    done    chan struct{}
+}
+```
+
+On each new failure, the logic is:
+- prune timestamps older than the window
+- append the current timestamp
+- if the threshold is reached, set `lockedUntil` and clear the failures slice
+
+Why clear the slice? If we left the timestamps in there, a single failure right after lockout expires could re-lock the IP because those old timestamps are still within the sliding window. That's not the "5 fails → lockout, then fresh budget" semantics we want, so we clear.
+
+The map is in-memory only. Process restart wipes all throttling state - which is actually a nice property: if you restart Forq, attackers get a clean slate, but so do legitimate users (no operator stuck in a lockout from a misconfigured client). For a single-binary tool, that's a reasonable trade-off.
+
+#### Bounded memory
+
+If we tracked unlimited IPs, an attacker rotating through many distinct sources could grow the map indefinitely. To bound this, the map has a hard cap of 10,000 entries. When a new IP arrives at full capacity, the entry with the smallest `lastSeenMs` is evicted to make room - simple LRU-by-timestamp.
+
+```go
+const throttlingMaxEntries = 10000
+
+if !ok {
+    if len(ts.entries) >= throttlingMaxEntries {
+        ts.evictOldestEntryLocked()
+    }
+    e = &throttlingEntry{}
+    ts.entries[ip] = e
+}
+```
+
+10k entries is plenty for any realistic deployment (each entry is roughly 80 bytes, so worst case under 1 MB total). Beyond that we're under attack, and bounded memory matters more than tracking every attacker IP - eviction picks off the oldest entry, which is most likely a probe that already moved on.
+
+A background sweep also runs every 5 minutes to remove entries idle for more than 10 minutes. Between the sweep and the cap, the map stays bounded.
+
+Btw, I considered using a cache library like [otter](https://github.com/maypok86/otter) (Caffeine-inspired) or `hashicorp/golang-lru` for this, since "writing your own LRU" is generally a smell in Java-land. Decided against it: at our scale (10k cap, microsecond eviction), the fancy admission-policy stuff in those libraries is solving a problem we don't have. The 15 lines we wrote are easier to audit, don't add a dependency, and align with Forq's "lean dependencies" stance. If we ever need caches in multiple places in the codebase, then standardizing on a library would start to pay for itself.
+
+### Client IP detection
+
+Throttling is only as good as the IP you key it on. When Forq is exposed directly to clients, `RemoteAddr` is the right answer - it's the actual TCP peer. But Forq is recommended to run behind a reverse proxy in production, and in that case every request looks like it comes from the proxy's IP. Throttle by `RemoteAddr` and you've effectively turned login throttling into "if anyone fails 5 times, everyone is locked out for a minute." That's not throttling, that's collective punishment.
+
+The naive fix is to read `X-Forwarded-For` always. The naive fix has its own footgun: if Forq is exposed directly, attackers can set whatever XFF they want and Forq will dutifully throttle their fake IP while the real attacker keeps probing.
+
+So Forq treats this as the operator's call:
+
+- **Default (`FORQ_TRUST_PROXY_HEADERS` unset or `false`)**: use `RemoteAddr` only. Safe for direct exposure, broken behind a proxy.
+- **`FORQ_TRUST_PROXY_HEADERS=true`**: read the rightmost entry of `X-Forwarded-For` (or `X-Real-IP` if XFF is absent), fall back to `RemoteAddr` on missing or malformed values. The operator is promising that Forq is behind a proxy that strips/replaces incoming forwarded headers from clients.
+
+This is the [Better-Auth](https://www.better-auth.com/) school of design: don't try to detect the deployment, let the operator declare it. The configuration becomes a one-line opt-in instead of a CIDR-list-with-IPv6-edge-cases-and-multi-hop-rules thing.
+
+Why rightmost specifically? Because that's where the proxy *appends* the connecting client's IP. The XFF chain format is `client, intermediate1, intermediate2`, where rightmost is closest to us. With one trusted proxy hop in front of Forq, the rightmost entry is the actual client. Picking leftmost is the spoofable choice - anyone can prepend an entry to XFF before the request ever hits your proxy. Picking rightmost is what nginx, Rails, Express, and every "trust the trusted layer" framework does.
+
+Here is the code from `common/http.go`:
+
+```go
+func ClientIP(req *http.Request, trustProxyHeaders bool) string {
+    if trustProxyHeaders {
+        if xff := req.Header.Get("X-Forwarded-For"); xff != "" {
+            parts := strings.Split(xff, ",")
+            rightmost := strings.TrimSpace(parts[len(parts)-1])
+            if ip := net.ParseIP(rightmost); ip != nil {
+                return ip.String()
+            }
+        }
+        if xri := strings.TrimSpace(req.Header.Get("X-Real-IP")); xri != "" {
+            if ip := net.ParseIP(xri); ip != nil {
+                return ip.String()
+            }
+        }
+    }
+    host, _, err := net.SplitHostPort(req.RemoteAddr)
+    if err != nil {
+        return req.RemoteAddr
+    }
+    return host
+}
+```
+
+A few notes:
+
+- Validation via `net.ParseIP` - malformed values fall back to `RemoteAddr` rather than being trusted as "an IP".
+- Single-hop assumption. If you have multiple proxy hops (CDN → load balancer → Forq), have your innermost proxy canonicalize the header before it reaches Forq. Forq won't walk an arbitrary chain for you.
+- No CIDR config, no trusted-proxy list. The operator either trusts the proxy in front (and configures it correctly) or doesn't. Yes, this is less expressive than the full "trusted proxies" pattern from nginx/Express/etc., but the audience is single-org self-hosted Forq, not a multi-tenant CDN.
+
+If you set `FORQ_TRUST_PROXY_HEADERS=true`, Forq logs a `WARN` at startup reminding you that misconfiguration here makes throttling spoofable. Read it, take it seriously.
+
+### Security headers
+
+Both the API and the UI apply a baseline of HTTP security headers via middleware. The full sets differ - UI responses are rendered in browsers, API responses are typically consumed by service clients, so the threat models aren't identical.
+
+The UI gets:
+
+- `Content-Security-Policy` allowing `'self'` + `cdn.jsdelivr.net` (where DaisyUI/Tailwind/HTMX are loaded from) + `'unsafe-inline'` for inline `<script>`/`<style>` blocks and HTMX's `hx-on:*` event attributes
+- `X-Frame-Options: DENY` and `frame-ancestors 'none'` (clickjacking)
+- `X-Content-Type-Options: nosniff` (MIME sniffing)
+- `Referrer-Policy: same-origin`
+- `object-src 'none'`, `frame-src 'none'`, `base-uri 'self'`, `form-action 'self'` to lock down what `default-src 'self'` would otherwise permit
+- `Strict-Transport-Security` (only when `FORQ_ENV=pro`)
+
+The `'unsafe-inline'` in `script-src` is a CSP weakening I accepted reluctantly. HTMX uses inline event attributes (`hx-on:click="..."` and friends), and reworking the entire UI to use nonces every render is a complexity bomb. The realistic alternative would be to switch the frontend to a different stack, which I'm not going to do for a marginal CSP gain. So `'unsafe-inline'` stays, and we lean on the rest of the headers + CSRF + session auth for defense-in-depth.
+
+The API gets a leaner subset: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, and HSTS in pro. No CSP because there's no rendering - JSON responses don't have a script context.
+
+### Session cookie Secure flag
+
+The Admin UI section below covers session auth at a high level, but one detail belongs here: the `ForqSession` cookie's `Secure` flag is set based on `FORQ_ENV=pro`, not based on whether the current request arrived over TLS.
+
+Why? Because in production Forq usually runs behind a TLS-terminating reverse proxy. The proxy speaks HTTPS to the browser and plain HTTP to Forq. So `req.TLS` is `nil` even though the user-facing connection is HTTPS. Reading `req.TLS` to decide on `Secure` would mean cookies issued in production are missing the `Secure` flag - and any HTTP misconfiguration anywhere downstream could leak them.
+
+Tying `Secure` to `FORQ_ENV=pro` instead matches operator intent: "production = HTTPS, full stop." Local dev (`FORQ_ENV=local`) keeps `Secure: false` so plain HTTP testing still works.
+
+### What you don't get out of the box
+
+A few things I considered and didn't ship:
+
+- **Per-route rate limiting beyond auth.** Throttling targets auth failures, not general request rate. If you need per-client request limits, do it at the proxy layer (nginx `limit_req_zone`, Caddy `rate_limit`, etc.).
+- **Trusted-proxy CIDR list / multi-hop XFF parsing.** Discussed above. Not in the audience's deployment shape.
+- **TLS termination in Forq itself.** Forq speaks HTTP and unencrypted HTTP/2 (H2C). TLS is the proxy's job. See the Consumer API section above for the reasoning.
+
+Alright, this covers security. Let me briefly mention the Admin UI before wrapping up.
 
 ## Admin UI
 
@@ -1078,11 +1224,12 @@ I'm sharing this here, so you are not surprised when you see HTML snippets in th
 Here is the code snippet from the UI router that shows all the existing Hypermedia endpoints:
 
 ```go
+router.Use(securityHeaders(ur.env))
 router.Use(csrfPrevention(ur.csrfErrorHandler, ur.env))
 
-// unprotected login routes:
+// unprotected login routes (throttled):
 router.Get("/login", ur.loginPage)
-router.Post("/login", ur.processLogin)
+router.With(loginThrottle(ur.throttlingService, ur.trustProxyHeaders)).Post("/login", ur.processLogin)
 
 // protected routes:
 router.With(sessionAuth(ur.sessionsService)).
@@ -1103,8 +1250,10 @@ router.Route("/queue/{queue}", func(r chi.Router) {
 })
 ```
 
-Among endpoints, you can see that there are 2 middlewares applied to the protected routes:
+Among endpoints, you can see that there are 4 middlewares involved:
+- `securityHeaders` - sets HTTP security headers on every response. Covered in the Security section above.
 - `csrfPrevention` - protects against CSRF attacks by validating the CSRF token in the request
+- `loginThrottle` - rate-limits login attempts to slow down brute-force probes. Covered in the Security section above.
 - `sessionAuth` - protects against unauthorized access by checking the session cookie in the request
 
 There is nothing you should do for CSRF, as Forq handles it automatically. Check the [OWASP CSRF Guide](https://owasp.org/www-community/attacks/csrf) if you want to learn more about this attack.
