@@ -27,9 +27,9 @@ However, there are a few options that can be configured via environment variable
 ```bash
 # Required
 export FORQ_AUTH_SECRET=your-auth-secret-min-32-chars-long                # to use for API and Admin UI authentication
+export FORQ_DB_PATH=./data/forq.db                                        # path to the SQLite database file
 
 # Optional
-export FORQ_DB_PATH=./data/forq.db                                        # Default: OS-specific location
 export FORQ_METRICS_ENABLED=false                                         # true|false (default: false)
 export FORQ_METRICS_AUTH_SECRET=your-metrics-secret-min-32-chars-long     # required if FORQ_METRICS_ENABLED is true
 export FORQ_ENV=pro                                                       # local|pro (default: pro)
@@ -66,15 +66,13 @@ export FORQ_AUTH_SECRET=your-auth-secret-min-32-chars-long
 
 ### Database Path (FORQ_DB_PATH)
 
-Set the path to the SQLite database file used by Forq to store messages and metadata. If not set, it defaults to an OS-specific location.
-Make sure that the path is writable and consistent across restarts. 
-For example, is you are using relative path, make sure you always start Forq from the same working directory.
-
-Generally, it's a good idea to set this env var rather than relying on the default location.
+Set the path to the SQLite database file used by Forq to store messages and metadata.
+Make sure that the path is writable and consistent across restarts.
+For example, if you are using a relative path, make sure you always start Forq from the same working directory.
 
 - **Type**: String
-- **Default**: OS-specific location
-- **Required**: No
+- **Default**: None (must be set)
+- **Required**: Yes
 
 ```bash
 export FORQ_DB_PATH=./data/forq.db

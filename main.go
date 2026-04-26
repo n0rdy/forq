@@ -19,7 +19,6 @@ import (
 	"github.com/n0rdy/forq/metrics"
 	"github.com/n0rdy/forq/services"
 	"github.com/n0rdy/forq/ui"
-	"github.com/n0rdy/forq/utils"
 
 	_ "github.com/golang-migrate/migrate/v4/database/sqlite"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
@@ -39,11 +38,7 @@ func main() {
 	queueTtlHours, dlqTtlHours := getTtlConfigs()
 	apiAddr, uiAddr := getServerAddrs()
 
-	dbPath, err := getDbPath()
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to get or create default database path")
-		panic(err)
-	}
+	dbPath := getDbPath()
 	log.Info().Msgf("using database file at: %s", dbPath)
 
 	runMigrations(dbPath)
@@ -273,12 +268,13 @@ func getServerAddrs() (string, string) {
 	return apiAddr, uiAddr
 }
 
-func getDbPath() (string, error) {
+func getDbPath() string {
 	dbPath := os.Getenv("FORQ_DB_PATH")
 	if dbPath == "" {
-		return utils.GetOrCreateDefaultDBPath()
+		log.Fatal().Msg("database path is not provided: set FORQ_DB_PATH environment variable")
+		panic("database path is not provided: set FORQ_DB_PATH environment variable")
 	}
-	return dbPath, nil
+	return dbPath
 }
 
 func runMigrations(dbPath string) {

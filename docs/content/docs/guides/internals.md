@@ -30,39 +30,7 @@ Further in this guide, I'll show that a lot of Forq logic is built around SQLite
 I always try to rely on the standard library as much as possible, but for some things, I had to use third-party libraries. 
 Check the [go.mod](https://github.com/n0rdy/forq/blob/main/go.mod) for the full up-to-date list.
 
-Since SQLite is a file-based DB, the file must be located somewhere. You can configure that via the `FORQ_DB_PATH` environment variable.
-If you won't set it, Forq will use the OS-specific location for that via such logic:
-
-```go
-switch runtime.GOOS {
-case common.WindowsOS:
-	if appData := os.Getenv("APPDATA"); appData != "" {
-		return toDbFilePath(appData)
-	}
-	if localAppData := os.Getenv("LOCALAPPDATA"); localAppData != "" {
-		return toDbFilePath(localAppData)
-	}
-	if homeDir, _ := os.UserHomeDir(); homeDir != "" {
-		return toDbFilePath(homeDir)
-	}
-case common.MacOS:
-	if homeDir, _ := os.UserHomeDir(); homeDir != "" {
-		return toDbFilePath(filepath.Join(homeDir, "Library", "Application Support"))
-	}
-case common.LinuxOS:
-	if xdgData := os.Getenv("XDG_DATA_HOME"); xdgData != "" {
-		return toDbFilePath(xdgData)
-	}
-	if homeDir, _ := os.UserHomeDir(); homeDir != "" {
-		return toDbFilePath(filepath.Join(homeDir, ".local", "share"))
-	}
-}
-
-// Return empty string instead of calling toDbFilePath("")
-return ""
-```
-
-I'd strongly recommend setting this variable explicitly in production, so you know where the DB file is located.
+Since SQLite is a file-based DB, the file must be located somewhere. You configure that via the required `FORQ_DB_PATH` environment variable — Forq refuses to start without it. This is intentional: Forq used to fall back to an OS-specific default location, but that was easy to forget about and could lead to two separate DB files if you later passed the env var pointing somewhere else. Making the path explicit removes that footgun and keeps state ownership in your hands.
 
 Another suggestion about SQLite: while choosing the platform to host Forq, prefer SSD over HDD to get better performance.
 

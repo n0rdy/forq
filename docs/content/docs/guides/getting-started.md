@@ -69,9 +69,9 @@ Forq uses environment variables for configuration:
 ```bash
 # Required
 export FORQ_AUTH_SECRET=your-auth-secret-min-32-chars-long                # to use for API and Admin UI authentication
+export FORQ_DB_PATH=./data/forq.db                                        # path to the SQLite database file
 
 # Optional
-export FORQ_DB_PATH=./data/forq.db                                        # Default: OS-specific location
 export FORQ_METRICS_ENABLED=false                                         # true|false (default: false)
 export FORQ_METRICS_AUTH_SECRET=your-metrics-secret-min-32-chars-long     # required if FORQ_METRICS_ENABLED is true
 export FORQ_ENV=pro                                                       # local|pro (default: pro)
@@ -80,8 +80,6 @@ export FORQ_DLQ_TTL_HOURS=168                                             # Defa
 export FORQ_API_ADDR=localhost:8080                                       # Default: localhost:8080
 export FORQ_UI_ADDR=localhost:8081                                        # Default: localhost:8081
 ```
-
-While only `FORQ_AUTH_SECRET` is required, it is recommended to set `FORQ_DB_PATH` to a persistent location.
 
 ### Running Forq
 
