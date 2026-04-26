@@ -38,6 +38,7 @@ func main() {
 	metricsEnabled, metricsAuthSecret := getMetricsConfigs()
 	queueTtlHours, dlqTtlHours := getTtlConfigs()
 	apiAddr, uiAddr := getServerAddrs()
+	trustProxyHeaders := getTrustProxyHeaders()
 
 	dbPath := getDbPath()
 	log.Info().Msgf("using database file at: %s", dbPath)
@@ -52,7 +53,7 @@ func main() {
 	}
 	defer repo.Close()
 
-	monirotingService := services.NewMonitoringService(repo)
+	monitoringService := services.NewMonitoringService(repo)
 	metricsService := metrics.NewMetricsService(metricsEnabled)
 	queuesService := services.NewQueuesService(repo)
 	messagesService := services.NewMessagesService(metricsService, repo, appConfigs)
@@ -82,7 +83,7 @@ func main() {
 	shutdownCh := make(chan struct{})
 	var shutdownOnce sync.Once
 
-	apiRouter := api.NewRouter(monirotingService, messagesService, throttlingService, authSecret, metricsEnabled, metricsAuthSecret, env)
+	apiRouter := api.NewRouter(monitoringService, messagesService, throttlingService, authSecret, metricsEnabled, metricsAuthSecret, env, trustProxyHeaders)
 
 	var apiProtocols http.Protocols
 	apiProtocols.SetUnencryptedHTTP2(true)
@@ -98,7 +99,7 @@ func main() {
 		Protocols:         &apiProtocols,
 	}
 
-	uiRouter := ui.NewRouter(messagesService, sessionsService, queuesService, throttlingService, authSecret, env)
+	uiRouter := ui.NewRouter(messagesService, sessionsService, queuesService, throttlingService, authSecret, env, trustProxyHeaders)
 
 	var uiProtocols http.Protocols
 	uiProtocols.SetUnencryptedHTTP2(true)
@@ -186,6 +187,23 @@ func getAuthSecret() string {
 		log.Fatal().Msgf("auth secret is too short: must be at least %d characters", minAuthSecretLength)
 	}
 	return authSecret
+}
+
+func getTrustProxyHeaders() bool {
+	v := os.Getenv("FORQ_TRUST_PROXY_HEADERS")
+	if v == "" {
+		return false
+	}
+	trust, err := strconv.ParseBool(v)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to parse FORQ_TRUST_PROXY_HEADERS env var")
+	}
+	if trust {
+		log.Warn().Msg("FORQ_TRUST_PROXY_HEADERS=true: client IP will be read from X-Forwarded-For. " +
+			"Forq MUST be behind a reverse proxy that strips or replaces incoming X-Forwarded-For from clients, " +
+			"otherwise IPs are spoofable and throttling can be bypassed.")
+	}
+	return trust
 }
 
 func getMetricsConfigs() (bool, string) {

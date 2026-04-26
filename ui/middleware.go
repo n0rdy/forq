@@ -6,6 +6,7 @@ import (
 
 	"github.com/n0rdy/forq/common"
 	"github.com/n0rdy/forq/services"
+	"github.com/n0rdy/forq/utils"
 
 	"github.com/justinas/nosurf"
 )
@@ -46,10 +47,10 @@ func securityHeaders(env string) func(http.Handler) http.Handler {
 // loginThrottle middleware blocks login attempts from IPs that have exceeded
 // the failure threshold. Renders the login page with a rate-limit message
 // instead of just returning 429 with no body, so the UX is still recognizable.
-func loginThrottle(throttlingService *services.ThrottlingService) func(http.Handler) http.Handler {
+func loginThrottle(throttlingService *services.ThrottlingService, trustProxyHeaders bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			ip := common.ClientIP(req)
+			ip := utils.ClientIP(req, trustProxyHeaders)
 			if throttlingService.IsLocked(ip) {
 				data := common.LoginPageData{
 					Title: "Login",

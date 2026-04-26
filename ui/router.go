@@ -5,6 +5,7 @@ import (
 
 	"github.com/n0rdy/forq/common"
 	"github.com/n0rdy/forq/services"
+	"github.com/n0rdy/forq/utils"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/rs/zerolog/log"
@@ -17,9 +18,10 @@ type Router struct {
 	throttlingService *services.ThrottlingService
 	authSecret        string
 	env               string
+	trustProxyHeaders bool
 }
 
-func NewRouter(messagesService *services.MessagesService, sessionsService *services.SessionsService, queuesService *services.QueuesService, throttlingService *services.ThrottlingService, authSecret string, env string) *Router {
+func NewRouter(messagesService *services.MessagesService, sessionsService *services.SessionsService, queuesService *services.QueuesService, throttlingService *services.ThrottlingService, authSecret string, env string, trustProxyHeaders bool) *Router {
 	return &Router{
 		messagesService:   messagesService,
 		sessionsService:   sessionsService,
@@ -27,6 +29,7 @@ func NewRouter(messagesService *services.MessagesService, sessionsService *servi
 		throttlingService: throttlingService,
 		authSecret:        authSecret,
 		env:               env,
+		trustProxyHeaders: trustProxyHeaders,
 	}
 }
 
@@ -38,7 +41,7 @@ func (ur *Router) NewRouter() *chi.Mux {
 
 	// unprotected login routes (throttled):
 	router.Get("/login", ur.loginPage)
-	router.With(loginThrottle(ur.throttlingService)).Post("/login", ur.processLogin)
+	router.With(loginThrottle(ur.throttlingService, ur.trustProxyHeaders)).Post("/login", ur.processLogin)
 
 	// protected routes:
 	router.With(sessionAuth(ur.sessionsService)).
@@ -83,7 +86,7 @@ func (ur *Router) processLogin(w http.ResponseWriter, req *http.Request) {
 
 	token := req.FormValue("token")
 	if token != ur.authSecret {
-		ur.throttlingService.RecordFailure(common.ClientIP(req))
+		ur.throttlingService.RecordFailure(utils.ClientIP(req, ur.trustProxyHeaders))
 		log.Error().Msg("Invalid login token")
 		data := common.LoginPageData{
 			Title: "Login",
