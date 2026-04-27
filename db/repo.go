@@ -7,12 +7,13 @@ import (
 	"fmt"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/n0rdy/forq/common"
 	"github.com/n0rdy/forq/configs"
 
-	_ "github.com/mattn/go-sqlite3"
+	"github.com/mattn/go-sqlite3"
 	"github.com/rs/zerolog/log"
 )
 
@@ -22,9 +23,63 @@ type ForqRepo struct {
 	appConfigs *configs.AppConfigs
 }
 
+const (
+	readDriverName  = "sqlite3-forq-read"
+	writeDriverName = "sqlite3-forq-write"
+)
+
+// readPragmas are applied to every read-pool connection on open.
+// cache_size is negative = KB; -10000 means a 10MB page cache per connection.
+// hard_heap_limit caps SQLite's per-connection heap so a runaway query (e.g.,
+// the admin UI scanning a huge DLQ) returns SQLITE_NOMEM instead of OOMing
+// the process.
+var readPragmas = []string{
+	"PRAGMA synchronous = NORMAL",
+	"PRAGMA temp_store = MEMORY",
+	"PRAGMA cache_size = -10000",
+	"PRAGMA hard_heap_limit = 104857600",
+}
+
+// writePragmas are applied to the (single) write-pool connection on open.
+// optimize=0x10002 is SQLite's recommended one-shot at connection open;
+// the periodic PRAGMA optimize is run separately by the maintenance job.
+// Larger cache_size since this is the only write connection.
+var writePragmas = []string{
+	"PRAGMA synchronous = NORMAL",
+	"PRAGMA temp_store = MEMORY",
+	"PRAGMA cache_size = -40000",
+	"PRAGMA optimize = 0x10002",
+}
+
+var registerOnce sync.Once
+
+func registerDrivers() {
+	registerOnce.Do(func() {
+		sql.Register(readDriverName, &sqlite3.SQLiteDriver{
+			ConnectHook: makeConnectHook(readPragmas),
+		})
+		sql.Register(writeDriverName, &sqlite3.SQLiteDriver{
+			ConnectHook: makeConnectHook(writePragmas),
+		})
+	})
+}
+
+func makeConnectHook(pragmas []string) func(*sqlite3.SQLiteConn) error {
+	return func(conn *sqlite3.SQLiteConn) error {
+		for _, p := range pragmas {
+			if _, err := conn.Exec(p, nil); err != nil {
+				return fmt.Errorf("apply %q: %w", p, err)
+			}
+		}
+		return nil
+	}
+}
+
 func NewSQLiteRepo(dbPath string, appConfigs *configs.AppConfigs) (*ForqRepo, error) {
-	// Create read connection with multiple connections for concurrent reads
-	dbRead, err := sql.Open("sqlite3", applyConnectionSettings(dbPath, false))
+	registerDrivers()
+
+	// Create read connection pool with multiple connections for concurrent reads.
+	dbRead, err := sql.Open(readDriverName, dbPath)
 	if err != nil {
 		return nil, err
 	}
@@ -37,10 +92,10 @@ func NewSQLiteRepo(dbPath string, appConfigs *configs.AppConfigs) (*ForqRepo, er
 		return nil, fmt.Errorf("ping read database: %w", err)
 	}
 
-	// Create write connection with single connection to serialize writes
-	// we are running optimizations pragma ONLY on the write connection, as it might lock the database for a while
-	// and our read flow doesn't expect any locks.
-	dbWrite, err := sql.Open("sqlite3", applyConnectionSettings(dbPath, true))
+	// Create write connection pool with a single connection to serialize writes.
+	// optimize-on-connect runs only here, as it can briefly lock the DB and the
+	// read flow doesn't expect any locks.
+	dbWrite, err := sql.Open(writeDriverName, dbPath)
 	if err != nil {
 		dbRead.Close()
 		return nil, err
@@ -60,17 +115,6 @@ func NewSQLiteRepo(dbPath string, appConfigs *configs.AppConfigs) (*ForqRepo, er
 		dbWrite:    dbWrite,
 		appConfigs: appConfigs,
 	}, nil
-}
-
-func applyConnectionSettings(dbPath string, withOptimization bool) string {
-	urlWithSettings := dbPath + "?_pragma=synchronous(NORMAL)&_pragma=temp_store(MEMORY)"
-	if withOptimization {
-		// from SQLite docs:
-		// Applications with long-lived database connections should run "PRAGMA optimize=0x10002" when the database connection first opens,
-		// then run "PRAGMA optimize" again at periodic intervals - perhaps once per day.
-		urlWithSettings += "&_pragma=optimize(0x10002)"
-	}
-	return urlWithSettings
 }
 
 func (fr *ForqRepo) InsertMessage(newMessage *NewMessage, ctx context.Context) error {
