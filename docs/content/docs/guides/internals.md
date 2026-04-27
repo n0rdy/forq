@@ -370,6 +370,8 @@ dbWrite.SetMaxIdleConns(1)
 dbWrite.SetConnMaxLifetime(0)
 ```
 
+The snippet is simplified for readability - the actual code in `db/repo.go` wraps the two `sql.Register` calls in `sync.Once`, since registering the same driver name twice would panic. Important if `NewSQLiteRepo` ever gets called more than once in a single process (tests, for instance).
+
 When the DB operation is read-only, it uses the `dbRead` connection pool, and when it's a write operation, it uses the `dbWrite` connection pool.
 
 If you are coming from the Postgres or MySQL world (btw, I am too, and I love Postgres), that might sound a bit wierd to have 1 connection for writes only. That might be extremely slow!
