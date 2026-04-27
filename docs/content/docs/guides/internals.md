@@ -132,12 +132,31 @@ This allows for much better concurrency between readers and writers, making it a
 
 I'd say this is on the reasonable defaults for SQLite these days if the context is multi-threaded applications.
 
-There are other defaults that we change in SQLite for Forq. However, they are not persistent across connections, so we set them on each connection rather than in the migration file.
+There are other defaults we change in SQLite for Forq. Unlike `journal_mode`, these aren't persisted in the database file, so they have to be applied to every new connection. Forq does this via mattn/go-sqlite3's `ConnectHook`, which runs a list of `PRAGMA` statements on the connection right after it's opened, before any query is run on it.
+
+Two reasons for the connect-hook approach: first, the URL parameter syntax that some SQLite drivers accept (`?_pragma=...`) isn't supported by mattn, so it would silently no-op. Second, we want different pragmas for the read pool vs the write pool, and a hook is the cleanest way to bind a pragma set to a specific driver.
+
+Read pool (every connection in the pool gets these):
+
 ```sql
-PRAGMA synchronous = NORMAL; -- Good balance between performance and durability
-PRAGMA temp_store = MEMORY; -- Use memory for temporary storage to improve performance and reduce disk I/O
-PRAGMA optimize 0x10002; -- Run automatic optimizations to improve performance on a new connection being opened
+PRAGMA synchronous = NORMAL;            -- Good balance between performance and durability
+PRAGMA temp_store = MEMORY;             -- Keep temp tables and sort buffers in RAM
+PRAGMA cache_size = -10000;             -- ~10MB page cache per connection (negative = KB)
+PRAGMA hard_heap_limit = 104857600;     -- 100MB cap so a runaway query returns SQLITE_NOMEM instead of OOMing the process
 ```
+
+Write pool (single connection, see "Single writer only" below for why):
+
+```sql
+PRAGMA synchronous = NORMAL;
+PRAGMA temp_store = MEMORY;
+PRAGMA cache_size = -40000;             -- ~40MB; we can be more generous because there's only one write connection
+PRAGMA optimize = 0x10002;              -- SQLite's recommended one-shot optimize when a long-lived connection opens
+```
+
+The split exists because the write connection has different needs: it benefits from a bigger cache (only one of them, not 17), and it's the right place to run the on-connect `optimize` since that operation can briefly take a write lock. Read connections don't need that, but they do need `hard_heap_limit` because the admin UI is the most likely place a heavy query lands.
+
+`cache_size` of 10MB per read connection is a deliberate restraint: Forq targets small-to-medium workloads where the DB is typically tens of MB, so 10MB already caches most of the hot working set. Bumping every read connection to 40MB would push worst-case cache footprint past 600MB, which is a lot for a tool whose pitch is "low resource footprint." Smaller defaults, but actually applied, beat bigger defaults that get silently dropped on the floor.
 
 ### Table structure
 
@@ -320,8 +339,17 @@ What that means in practice is that I have 2 separate connection pools in Forq:
 Here is the relevant code snippet:
 
 ```go
-// Create read connection with multiple connections for concurrent reads
-dbRead, err := sql.Open("sqlite", applyConnectionSettings(dbPath, false))
+// Two custom drivers, one per pool, each with its own ConnectHook applying
+// the read or write pragma set described above.
+sql.Register("sqlite3-forq-read", &sqlite3.SQLiteDriver{
+	ConnectHook: makeConnectHook(readPragmas),
+})
+sql.Register("sqlite3-forq-write", &sqlite3.SQLiteDriver{
+	ConnectHook: makeConnectHook(writePragmas),
+})
+
+// Create read connection pool with multiple connections for concurrent reads.
+dbRead, err := sql.Open("sqlite3-forq-read", dbPath)
 if err != nil {
 	return nil, err
 }
@@ -329,15 +357,10 @@ dbRead.SetMaxOpenConns(runtime.NumCPU()*2 + 1)
 dbRead.SetMaxIdleConns(runtime.NumCPU()*2 + 1)
 dbRead.SetConnMaxLifetime(0)
 
-if err := dbRead.Ping(); err != nil {
-	dbRead.Close()
-	return nil, fmt.Errorf("ping read database: %w", err)
-}
-
-// Create write connection with single connection to serialize writes
-// we are running optimizations pragma ONLY on the write connection, as it might lock the database for a while
-// and our read flow doesn't expect any locks.
-dbWrite, err := sql.Open("sqlite", applyConnectionSettings(dbPath, true))
+// Create write connection pool with a single connection to serialize writes.
+// optimize-on-connect runs only here, as it can briefly lock the DB and the
+// read flow doesn't expect any locks.
+dbWrite, err := sql.Open("sqlite3-forq-write", dbPath)
 if err != nil {
 	dbRead.Close()
 	return nil, err
@@ -346,6 +369,8 @@ dbWrite.SetMaxOpenConns(1)
 dbWrite.SetMaxIdleConns(1)
 dbWrite.SetConnMaxLifetime(0)
 ```
+
+The snippet is simplified for readability - the actual code in `db/repo.go` wraps the two `sql.Register` calls in `sync.Once`, since registering the same driver name twice would panic. Important if `NewSQLiteRepo` ever gets called more than once in a single process (tests, for instance).
 
 When the DB operation is read-only, it uses the `dbRead` connection pool, and when it's a write operation, it uses the `dbWrite` connection pool.
 
