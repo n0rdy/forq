@@ -50,9 +50,11 @@ jobs:
       - name: Build application
         run: go build -v ./...
 
-      # Placeholder tests
-      # - name: Run tests
-      #   run: go test -v ./...
+      - name: Run tests
+        run: go test -race ./...
+
+      - name: Build benchmarks module
+        run: cd benchmarks && go build ./... && go vet ./...
 
   # The compiled UI assets in ui/static are checked into the repo (so plain
   # `go build` needs no node toolchain). This job rebuilds them and fails if

@@ -8,7 +8,8 @@ CONTEXT.md
 
 test_data_large.sql
 
-benchmarks
+# compiled benchmark binary (the benchmarks/ sources are tracked)
+benchmarks/benchmarks
 
 # Hugo build outputs
 site/public/
