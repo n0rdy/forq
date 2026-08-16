@@ -155,6 +155,12 @@ func main() {
 		log.Warn().Msg("server failure, shutting down")
 	}
 
+	// cancel shutdownCtx on BOTH trigger paths: on the server-failure path it
+	// is not cancelled yet, and in-flight request contexts (incl. long polls
+	// on the surviving server) hang off it via BaseContext - without this they
+	// would hold Shutdown until its deadline instead of returning immediately
+	stopSignals()
+
 	// In-flight requests see their contexts cancelled via BaseContext, so this
 	// deadline only needs to cover response writing, not the 30s long poll.
 	gracefulCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

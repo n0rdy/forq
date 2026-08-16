@@ -223,6 +223,15 @@ func httpStatusForErrorCode(errCode string) int {
 		return http.StatusBadRequest
 	case strings.HasPrefix(errCode, "not_found."):
 		return http.StatusNotFound
+	// the codes below are currently written directly by middleware/handlers
+	// with their status and never travel through here as ForqError values -
+	// mapped anyway so a future refactor can't silently turn them into 500s:
+	case errCode == common.ErrCodeUnauthorized:
+		return http.StatusUnauthorized
+	case errCode == common.ErrCodeTooManyRequests:
+		return http.StatusTooManyRequests
+	case errCode == common.ErrCodeServiceUnhealthy:
+		return http.StatusServiceUnavailable
 	default:
 		return http.StatusInternalServerError
 	}
