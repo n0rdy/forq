@@ -141,6 +141,14 @@ func (pms *PrometheusMetricsService) SetQueueDepth(queueName string, depth int64
 	pms.queueDepth.WithLabelValues(queueName, pms.queueType(queueName)).Set(float64(depth))
 }
 
+// ResetQueueDepths drops all queue depth series before a collection cycle
+// repopulates them: a queue that drained to zero (or was purged) vanishes from
+// the stats query, and without the reset its gauge would report the last
+// non-zero depth forever.
+func (pms *PrometheusMetricsService) ResetQueueDepths() {
+	pms.queueDepth.Reset()
+}
+
 func (pms *PrometheusMetricsService) IncMessagesMovedToDlqTotalBy(count int64, reason string) {
 	pms.messagesMovedToDlqTotal.WithLabelValues(reason).Add(float64(count))
 }

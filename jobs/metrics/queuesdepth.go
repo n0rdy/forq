@@ -28,6 +28,9 @@ func NewQueuesDepthMetricsJob(metricsService metrics.Service, repo *db.ForqRepo,
 				if err != nil {
 					log.Error().Err(err).Msg("failed to fetch queues stats by QueuesDepthMetricsJob")
 				} else {
+					// reset so drained/purged queues drop to absent instead of
+					// reporting their last non-zero depth forever
+					metricsService.ResetQueueDepths()
 					for _, qs := range queuesStats {
 						metricsService.SetQueueDepth(qs.Name, int64(qs.MessagesCount))
 					}

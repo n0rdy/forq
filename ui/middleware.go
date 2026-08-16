@@ -6,8 +6,8 @@ import (
 
 	"github.com/n0rdy/forq/common"
 	"github.com/n0rdy/forq/services"
-	"github.com/n0rdy/forq/utils"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/justinas/nosurf"
 )
 
@@ -44,24 +44,16 @@ func securityHeaders(env string) func(http.Handler) http.Handler {
 	}
 }
 
-// loginThrottle middleware blocks login attempts from IPs that have exceeded
-// the failure threshold. Renders the login page with a rate-limit message
-// instead of just returning 429 with no body, so the UX is still recognizable.
-func loginThrottle(throttlingService *services.ThrottlingService, trustProxyHeaders bool) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			ip := utils.ClientIP(req, trustProxyHeaders)
-			if throttlingService.IsLocked(ip) {
-				data := common.LoginPageData{
-					Title: "Login",
-					Error: "Too many failed login attempts. Try again in a minute.",
-				}
-				RenderTemplateWithStatus(w, req, http.StatusTooManyRequests, "login.html", data)
-				return
-			}
-			next.ServeHTTP(w, req)
-		})
-	}
+// validateQueueName rejects queue-name URL segments outside the allowed
+// charset before they reach templates or destructive handlers.
+func validateQueueName(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if !common.IsValidQueueName(chi.URLParam(req, "queue")) {
+			http.NotFound(w, req)
+			return
+		}
+		next.ServeHTTP(w, req)
+	})
 }
 
 // sessionAuth middleware for UI routes

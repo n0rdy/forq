@@ -31,6 +31,10 @@ func (nms *NoopMetricsService) SetQueueDepth(queueName string, depth int64) {
 	// no-op
 }
 
+func (nms *NoopMetricsService) ResetQueueDepths() {
+	// no-op
+}
+
 func (nms *NoopMetricsService) IncMessagesMovedToDlqTotalBy(count int64, reason string) {
 	// no-op
 }

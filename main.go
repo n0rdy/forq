@@ -4,11 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"sync"
+	"syscall"
+	"time"
 
 	"github.com/n0rdy/forq/api"
 	"github.com/n0rdy/forq/common"
@@ -80,8 +84,14 @@ func main() {
 		defer queuesDepthMetricsJob.Close()
 	}
 
-	shutdownCh := make(chan struct{})
-	var shutdownOnce sync.Once
+	// shutdownCtx is cancelled on SIGINT/SIGTERM. It is also the BaseContext of
+	// both servers, so request contexts (incl. in-flight long polls) are cancelled
+	// immediately on shutdown instead of holding Shutdown() for up to 30s.
+	shutdownCtx, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stopSignals()
+
+	serverFailedCh := make(chan struct{})
+	var serverFailedOnce sync.Once
 
 	apiRouter := api.NewRouter(monitoringService, messagesService, throttlingService, authSecret, metricsEnabled, metricsAuthSecret, env, trustProxyHeaders)
 
@@ -97,6 +107,7 @@ func main() {
 		ReadHeaderTimeout: appConfigs.ServerConfig.Timeouts.ReadHeader,
 		IdleTimeout:       appConfigs.ServerConfig.Timeouts.Idle,
 		Protocols:         &apiProtocols,
+		BaseContext:       func(net.Listener) context.Context { return shutdownCtx },
 	}
 
 	uiRouter := ui.NewRouter(messagesService, sessionsService, queuesService, throttlingService, authSecret, env, trustProxyHeaders)
@@ -113,19 +124,16 @@ func main() {
 		ReadHeaderTimeout: appConfigs.ServerConfig.Timeouts.ReadHeader,
 		IdleTimeout:       appConfigs.ServerConfig.Timeouts.Idle,
 		Protocols:         &uiProtocols,
+		BaseContext:       func(net.Listener) context.Context { return shutdownCtx },
 	}
 
 	// Start API server
 	go func() {
 		log.Info().Msgf("Starting API server on %s", apiAddr)
 		err := apiServer.ListenAndServe()
-		if err != nil {
-			shutdownOnce.Do(func() { close(shutdownCh) })
-			if errors.Is(err, http.ErrServerClosed) {
-				log.Info().Msg("API server shutdown")
-			} else {
-				log.Warn().Err(err).Msg("API server failed")
-			}
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Warn().Err(err).Msg("API server failed")
+			serverFailedOnce.Do(func() { close(serverFailedCh) })
 		}
 	}()
 
@@ -133,37 +141,41 @@ func main() {
 	go func() {
 		log.Info().Msgf("Starting UI server on %s", uiAddr)
 		err := uiServer.ListenAndServe()
-		if err != nil {
-			shutdownOnce.Do(func() { close(shutdownCh) })
-			if errors.Is(err, http.ErrServerClosed) {
-				log.Info().Msg("UI server shutdown")
-			} else {
-				log.Warn().Err(err).Msg("UI server failed")
-			}
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Warn().Err(err).Msg("UI server failed")
+			serverFailedOnce.Do(func() { close(serverFailedCh) })
 		}
 	}()
 
-	for range shutdownCh {
-		log.Info().Msg("server shutdown requested")
+	// Block until a shutdown signal arrives or one of the servers dies.
+	select {
+	case <-shutdownCtx.Done():
+		log.Info().Msg("shutdown signal received")
+	case <-serverFailedCh:
+		log.Warn().Msg("server failure, shutting down")
+	}
 
-		// Shutdown API server
-		err := apiServer.Shutdown(context.Background())
-		if err != nil {
-			err := apiServer.Close()
-			if err != nil {
-				log.Warn().Err(err).Msg("failed to close API server")
-			}
-		}
+	// In-flight requests see their contexts cancelled via BaseContext, so this
+	// deadline only needs to cover response writing, not the 30s long poll.
+	gracefulCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-		// Shutdown UI server
-		err = uiServer.Shutdown(context.Background())
-		if err != nil {
-			err := uiServer.Close()
-			if err != nil {
-				log.Warn().Err(err).Msg("failed to close UI server")
-			}
+	if err := apiServer.Shutdown(gracefulCtx); err != nil {
+		log.Warn().Err(err).Msg("graceful API server shutdown failed, closing forcefully")
+		if err := apiServer.Close(); err != nil {
+			log.Warn().Err(err).Msg("failed to close API server")
 		}
 	}
+	if err := uiServer.Shutdown(gracefulCtx); err != nil {
+		log.Warn().Err(err).Msg("graceful UI server shutdown failed, closing forcefully")
+		if err := uiServer.Close(); err != nil {
+			log.Warn().Err(err).Msg("failed to close UI server")
+		}
+	}
+
+	log.Info().Msg("servers stopped, closing jobs and database")
+	// jobs and repo are closed by the deferred Close() calls above (LIFO: jobs
+	// first, repo last).
 }
 
 func getEnv() string {

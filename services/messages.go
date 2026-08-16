@@ -34,6 +34,15 @@ func NewMessagesService(metricsService metrics.Service, forqRepo *db.ForqRepo, a
 }
 
 func (ms *MessagesService) ProcessNewMessage(newMessage common.NewMessageRequest, queueName string, ctx context.Context) error {
+	// producing directly into a "-dlq" queue would create rows with the DLQ
+	// suffix but is_dlq = FALSE, confusing the dashboard/queue-page/DLQ-move
+	// logic (and a 5x failure would mint "foo-dlq-dlq"). DLQ messages are
+	// consumable, but they only enter a DLQ via the failure/expiry paths.
+	if strings.HasSuffix(queueName, common.DlqSuffix) {
+		log.Error().Str("queue", queueName).Msg("attempt to produce directly into a DLQ")
+		return common.ErrBadRequestProduceToDlq
+	}
+
 	if len(newMessage.Content) > ms.appConfigs.MessageContentMaxSizeBytes {
 		log.Error().Int("size", len(newMessage.Content)).Msg("message content exceeds limit")
 		return common.ErrBadRequestContentExceedsLimit

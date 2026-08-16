@@ -40,9 +40,9 @@ func (ur *Router) NewRouter() *chi.Mux {
 	router.Use(securityHeaders(ur.env))
 	router.Use(csrfPrevention(ur.csrfErrorHandler, ur.env))
 
-	// unprotected login routes (throttled):
+	// unprotected login routes (failed attempts are throttled in processLogin):
 	router.Get("/login", ur.loginPage)
-	router.With(loginThrottle(ur.throttlingService, ur.trustProxyHeaders)).Post("/login", ur.processLogin)
+	router.Post("/login", ur.processLogin)
 
 	// protected routes:
 	router.With(sessionAuth(ur.sessionsService)).
@@ -52,6 +52,7 @@ func (ur *Router) NewRouter() *chi.Mux {
 
 	router.Route("/queue/{queue}", func(r chi.Router) {
 		r.Use(sessionAuth(ur.sessionsService)) // session auth for all queue routes
+		r.Use(validateQueueName)
 
 		r.Get("/", ur.queueDetailsPage)
 		r.Get("/messages", ur.queueMessages)
@@ -85,15 +86,28 @@ func (ur *Router) processLogin(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// the token is checked FIRST (constant-time) so that a valid token always
+	// works even while the IP is locked out - behind a proxy without
+	// FORQ_TRUST_PROXY_HEADERS all clients share the proxy's IP, and someone
+	// else's failed attempts must not lock the admin out.
 	token := req.FormValue("token")
 	if subtle.ConstantTimeCompare([]byte(token), []byte(ur.authSecret)) != 1 {
-		ur.throttlingService.RecordFailure(utils.ClientIP(req, ur.trustProxyHeaders))
+		ip := utils.ClientIP(req, ur.trustProxyHeaders)
+		if ur.throttlingService.IsLocked(ip) {
+			data := common.LoginPageData{
+				Title: "Login",
+				Error: "Too many failed login attempts. Try again in a minute.",
+			}
+			RenderTemplateWithStatus(w, req, http.StatusTooManyRequests, "login.html", data)
+			return
+		}
+		ur.throttlingService.RecordFailure(ip)
 		log.Error().Msg("Invalid login token")
 		data := common.LoginPageData{
 			Title: "Login",
 			Error: "Invalid authentication token",
 		}
-		RenderTemplate(w, req, "login.html", data)
+		RenderTemplateWithStatus(w, req, http.StatusUnauthorized, "login.html", data)
 		return
 	}
 

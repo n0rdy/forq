@@ -29,17 +29,21 @@ func init() {
 	}
 }
 
+// apiKeyTokenAuth validates the API key and throttles repeated failures per IP.
+// The key is checked FIRST (constant-time), so a valid key always passes even
+// while its IP is locked out: behind a proxy without FORQ_TRUST_PROXY_HEADERS
+// all clients share the proxy's IP, and an attacker's bogus keys must not be
+// able to lock out legitimate producers/consumers.
 func apiKeyTokenAuth(authSecret string, throttlingService *services.ThrottlingService, trustProxyHeaders bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			ip := utils.ClientIP(req, trustProxyHeaders)
-			if throttlingService.IsLocked(ip) {
-				sendTooManyRequestsResponse(w)
-				return
-			}
-
 			authHeader := req.Header.Get("X-API-Key")
 			if subtle.ConstantTimeCompare([]byte(authHeader), []byte(authSecret)) != 1 {
+				ip := utils.ClientIP(req, trustProxyHeaders)
+				if throttlingService.IsLocked(ip) {
+					sendTooManyRequestsResponse(w)
+					return
+				}
 				throttlingService.RecordFailure(ip)
 				log.Error().Msg("Invalid API key")
 				sendUnauthorizedErrorResponse(w)

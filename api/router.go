@@ -73,10 +73,14 @@ func (ar *Router) NewRouter() *chi.Mux {
 
 		r.Route("/queues", func(r chi.Router) {
 			r.Route("/{queue}/messages", func(r chi.Router) {
+				r.Use(ar.validateQueueName)
+
 				r.Post("/", ar.produceMessage)
 				r.Get("/", ar.consumeMessage)
 
 				r.Route("/{messageId}", func(r chi.Router) {
+					r.Use(ar.validateMessageId)
+
 					r.Post("/ack", ar.ackMessage)
 					r.Post("/nack", ar.nackMessage)
 				})
@@ -85,6 +89,26 @@ func (ar *Router) NewRouter() *chi.Mux {
 	})
 
 	return router
+}
+
+func (ar *Router) validateQueueName(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if !common.IsValidQueueName(chi.URLParam(req, "queue")) {
+			ar.sendErrorResponse(w, http.StatusBadRequest, common.ErrCodeBadRequestInvalidQueueName)
+			return
+		}
+		next.ServeHTTP(w, req)
+	})
+}
+
+func (ar *Router) validateMessageId(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if !common.IsValidMessageId(chi.URLParam(req, "messageId")) {
+			ar.sendErrorResponse(w, http.StatusBadRequest, common.ErrCodeBadRequestInvalidMessageId)
+			return
+		}
+		next.ServeHTTP(w, req)
+	})
 }
 
 func (ar *Router) produceMessage(w http.ResponseWriter, req *http.Request) {

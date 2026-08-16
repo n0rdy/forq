@@ -16,6 +16,7 @@ type Service interface {
 	IncMessagesNackedTotalBy(count int64, queueName string)
 	IncMessagesRequeuedTotalBy(count int64, queueName string)
 	SetQueueDepth(queueName string, depth int64)
+	ResetQueueDepths()
 	IncMessagesMovedToDlqTotalBy(count int64, reason string)
 	IncMessagesStaleRecoveredTotalBy(count int64)
 	IncMessagesCleanupTotalBy(count int64, reason string)
