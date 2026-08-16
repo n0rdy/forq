@@ -26,6 +26,10 @@ type ForqRepo struct {
 const (
 	readDriverName  = "sqlite3-forq-read"
 	writeDriverName = "sqlite3-forq-write"
+
+	// sweepBatchSize bounds each expired-sweep UPDATE/DELETE so a large backlog
+	// doesn't hold the single write connection for the whole sweep.
+	sweepBatchSize = 1000
 )
 
 // readPragmas are applied to every read-pool connection on open.
@@ -34,6 +38,7 @@ const (
 // the admin UI scanning a huge DLQ) returns SQLITE_NOMEM instead of OOMing
 // the process.
 var readPragmas = []string{
+	"PRAGMA busy_timeout = 5000",
 	"PRAGMA synchronous = NORMAL",
 	"PRAGMA temp_store = MEMORY",
 	"PRAGMA cache_size = -10000",
@@ -45,6 +50,7 @@ var readPragmas = []string{
 // the periodic PRAGMA optimize is run separately by the maintenance job.
 // Larger cache_size since this is the only write connection.
 var writePragmas = []string{
+	"PRAGMA busy_timeout = 5000",
 	"PRAGMA synchronous = NORMAL",
 	"PRAGMA temp_store = MEMORY",
 	"PRAGMA cache_size = -40000",
@@ -160,7 +166,7 @@ func (fr *ForqRepo) SelectMessageForConsuming(queueName string, ctx context.Cont
             ORDER BY received_at ASC
             LIMIT 1
         )
-        RETURNING id, content;`
+        RETURNING id, content, processing_started_at;`
 
 	var msg MessageForConsuming
 	err := fr.dbWrite.QueryRowContext(ctx, query,
@@ -170,7 +176,7 @@ func (fr *ForqRepo) SelectMessageForConsuming(queueName string, ctx context.Cont
 		queueName,               // WHERE queue = ?
 		common.ReadyStatus,      // AND status = ?
 		nowMs,                   // AND process_after <= ?
-	).Scan(&msg.Id, &msg.Content)
+	).Scan(&msg.Id, &msg.Content, &msg.ProcessingStartedAt)
 
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -333,22 +339,25 @@ func (fr *ForqRepo) SelectMessagesForUI(queueName string, cursor string, limit i
 	return messages, nil
 }
 
-func (fr *ForqRepo) UpdateMessageOnConsumingFailure(messageId string, queueName string, ctx context.Context) error {
+func (fr *ForqRepo) UpdateMessageOnConsumingFailure(messageId string, queueName string, receipt int64, ctx context.Context) error {
 	nowMs := time.Now().UnixMilli()
 
+	// processing_started_at = receipt fences the nack to this exact delivery:
+	// a late nack from a consumer whose message was already reclaimed and
+	// redelivered carries a stale receipt and matches 0 rows.
 	query := fmt.Sprintf(`
-        UPDATE messages 
-        SET 
-            status = CASE 
+        UPDATE messages
+        SET
+            status = CASE
             	WHEN attempts >= ? THEN ?	-- failed if no more attempts left
             	ELSE ?						-- ready if there are attempts left
 			END,
-            process_after = CASE 
+            process_after = CASE
                 %s
             END,
             processing_started_at = NULL,
             updated_at = ?
-        WHERE id = ? AND queue = ? AND status = ?;`, fr.processAfterCases(nowMs))
+        WHERE id = ? AND queue = ? AND status = ? AND processing_started_at = ?;`, fr.processAfterCases(nowMs))
 
 	result, err := fr.dbWrite.ExecContext(ctx, query,
 		fr.appConfigs.MaxDeliveryAttempts, // WHEN attempts = ? (status check)
@@ -358,6 +367,7 @@ func (fr *ForqRepo) UpdateMessageOnConsumingFailure(messageId string, queueName 
 		messageId,                         // WHERE id = ?
 		queueName,                         // AND queue = ?
 		common.ProcessingStatus,           // AND status = ?
+		receipt,                           // AND processing_started_at = ?
 	)
 
 	if err != nil {
@@ -461,6 +471,10 @@ func (fr *ForqRepo) UpdateFailedMessagesForRegularQueues(ctx context.Context) (i
 func (fr *ForqRepo) UpdateExpiredMessagesForRegularQueues(ctx context.Context) (int64, error) {
 	nowMs := time.Now().UnixMilli()
 
+	// status IN (ready, failed) instead of != processing: SQLite can't use
+	// idx_expired with a != constraint on its leading column, while IN expands
+	// to two index range scans. Batched so one huge backlog doesn't hold the
+	// single write connection for the whole sweep.
 	query := `
         UPDATE messages
         SET
@@ -473,32 +487,47 @@ func (fr *ForqRepo) UpdateExpiredMessagesForRegularQueues(ctx context.Context) (
             failure_reason = ?,
             updated_at = ?,
             expires_after = ?
-        WHERE status != ? AND is_dlq = FALSE AND expires_after < ?;`
+        WHERE id IN (
+            SELECT id FROM messages
+            WHERE status IN (?, ?) AND is_dlq = FALSE AND expires_after < ?
+            LIMIT ?
+        );`
 
-	res, err := fr.dbWrite.ExecContext(ctx, query,
-		common.ReadyStatus,                 // status = ?
-		common.DlqSuffix,                   // queue = queue || ?
-		nowMs,                              // process_after = ?
-		common.MessageExpiredFailureReason, // failure_reason = ?
-		nowMs,                              // updated_at = ?
-		nowMs+fr.appConfigs.DlqTtlMs,       // expires_after = ?
-		common.ProcessingStatus,            // WHERE status != ?
-		nowMs,                              // AND expires_after < ?
-	)
-	if err != nil {
-		log.Error().Err(err).Msg("failed to update expired messages for regular queues")
-		return 0, common.ErrInternal
-	}
-	if res == nil {
-		return 0, nil
-	}
+	var totalRowsAffected int64
+	for {
+		if err := ctx.Err(); err != nil {
+			log.Warn().Err(err).Msg("expired messages sweep interrupted, will continue next run")
+			return totalRowsAffected, nil
+		}
 
-	rowsAffected, err := res.RowsAffected()
-	if err != nil {
-		log.Error().Err(err).Msg("failed to get rows affected after updating expired messages for regular queues")
-		return 0, common.ErrInternal
+		res, err := fr.dbWrite.ExecContext(ctx, query,
+			common.ReadyStatus,                 // status = ?
+			common.DlqSuffix,                   // queue = queue || ?
+			nowMs,                              // process_after = ?
+			common.MessageExpiredFailureReason, // failure_reason = ?
+			nowMs,                              // updated_at = ?
+			nowMs+fr.appConfigs.DlqTtlMs,       // expires_after = ?
+			common.ReadyStatus,                 // WHERE status IN (?,
+			common.FailedStatus,                //                  ?)
+			nowMs,                              // AND expires_after < ?
+			sweepBatchSize,                     // LIMIT ?
+		)
+		if err != nil {
+			log.Error().Err(err).Msg("failed to update expired messages for regular queues")
+			return totalRowsAffected, common.ErrInternal
+		}
+
+		rowsAffected, err := res.RowsAffected()
+		if err != nil {
+			log.Error().Err(err).Msg("failed to get rows affected after updating expired messages for regular queues")
+			return totalRowsAffected, common.ErrInternal
+		}
+		totalRowsAffected += rowsAffected
+
+		if rowsAffected < sweepBatchSize {
+			return totalRowsAffected, nil
+		}
 	}
-	return rowsAffected, nil
 }
 
 func (fr *ForqRepo) RequeueDlqMessages(queueName string, ctx context.Context) (int64, error) {
@@ -611,15 +640,18 @@ func (fr *ForqRepo) DeleteMessageFromDlq(messageId string, queueName string, ctx
 	return nil
 }
 
-func (fr *ForqRepo) DeleteMessageOnAck(messageId string, queueName string, ctx context.Context) error {
+func (fr *ForqRepo) DeleteMessageOnAck(messageId string, queueName string, receipt int64, ctx context.Context) error {
+	// processing_started_at = receipt fences the ack to this exact delivery -
+	// see UpdateMessageOnConsumingFailure for the rationale.
 	query := `
 		DELETE FROM messages
-		WHERE id = ? AND queue = ? AND status = ?;`
+		WHERE id = ? AND queue = ? AND status = ? AND processing_started_at = ?;`
 
 	result, err := fr.dbWrite.ExecContext(ctx, query,
 		messageId,               // WHERE id = ?
 		queueName,               // AND queue = ?
 		common.ProcessingStatus, // AND status = ?
+		receipt,                 // AND processing_started_at = ?
 	)
 	if err != nil {
 		log.Error().Err(err).Str("queue", queueName).Msg("failed to delete message on ack")
@@ -634,6 +666,7 @@ func (fr *ForqRepo) DeleteMessageOnAck(messageId string, queueName string, ctx c
 
 	if rowsAffected == 0 {
 		log.Warn().Str("queue", queueName).Str("message_id", messageId).Msg("no rows deleted on ack, message was either deleted already or does not exist")
+		return common.ErrNotFoundMessage
 	}
 	return nil
 }
@@ -665,29 +698,44 @@ func (fr *ForqRepo) DeleteFailedMessagesFromDlq(ctx context.Context) (int64, err
 func (fr *ForqRepo) DeleteExpiredMessagesFromDlq(ctx context.Context) (int64, error) {
 	nowMs := time.Now().UnixMilli()
 
+	// see UpdateExpiredMessagesForRegularQueues for the status IN + batching rationale
 	query := `
         DELETE FROM messages
-        WHERE status != ? AND is_dlq = TRUE AND expires_after < ?;`
+        WHERE id IN (
+            SELECT id FROM messages
+            WHERE status IN (?, ?) AND is_dlq = TRUE AND expires_after < ?
+            LIMIT ?
+        );`
 
-	res, err := fr.dbWrite.ExecContext(ctx, query,
-		common.ProcessingStatus, // WHERE status != ?
-		nowMs,                   // expires_after < ?
-	)
+	var totalRowsAffected int64
+	for {
+		if err := ctx.Err(); err != nil {
+			log.Warn().Err(err).Msg("expired DLQ messages sweep interrupted, will continue next run")
+			return totalRowsAffected, nil
+		}
 
-	if err != nil {
-		log.Error().Err(err).Msg("failed to delete expired messages from DLQ")
-		return 0, common.ErrInternal
-	}
-	if res == nil {
-		return 0, nil
-	}
+		res, err := fr.dbWrite.ExecContext(ctx, query,
+			common.ReadyStatus,  // WHERE status IN (?,
+			common.FailedStatus, //                  ?)
+			nowMs,               // AND expires_after < ?
+			sweepBatchSize,      // LIMIT ?
+		)
+		if err != nil {
+			log.Error().Err(err).Msg("failed to delete expired messages from DLQ")
+			return totalRowsAffected, common.ErrInternal
+		}
 
-	rowsAffected, err := res.RowsAffected()
-	if err != nil {
-		log.Error().Err(err).Msg("failed to get rows affected after deleting expired messages from DLQ")
-		return 0, common.ErrInternal
+		rowsAffected, err := res.RowsAffected()
+		if err != nil {
+			log.Error().Err(err).Msg("failed to get rows affected after deleting expired messages from DLQ")
+			return totalRowsAffected, common.ErrInternal
+		}
+		totalRowsAffected += rowsAffected
+
+		if rowsAffected < sweepBatchSize {
+			return totalRowsAffected, nil
+		}
 	}
-	return rowsAffected, nil
 }
 
 func (fr *ForqRepo) DeleteAllMessagesFromQueue(queueName string, ctx context.Context) (int64, error) {
@@ -720,7 +768,7 @@ func (fr *ForqRepo) Ping(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return fr.dbWrite.Ping()
+	return fr.dbWrite.PingContext(ctx)
 }
 
 func (fr *ForqRepo) Optimize(ctx context.Context) error {
@@ -752,10 +800,12 @@ func (fr *ForqRepo) Close() error {
 func (fr *ForqRepo) processAfterCases(nowMs int64) string {
 	var processAfterCases strings.Builder
 
-	// builds WHEN clauses for each backoff delay
+	// builds WHEN clauses for each backoff delay.
+	// `attempts` was already incremented when the message was claimed for
+	// consuming, so the first failed delivery arrives here with attempts = 1.
 	for i, delay := range fr.appConfigs.BackoffDelaysMs {
 		if i < len(fr.appConfigs.BackoffDelaysMs)-1 {
-			processAfterCases.WriteString(fmt.Sprintf("WHEN attempts + 1 = %d THEN %d ", i+1, nowMs+delay))
+			processAfterCases.WriteString(fmt.Sprintf("WHEN attempts = %d THEN %d ", i+1, nowMs+delay))
 		} else {
 			processAfterCases.WriteString(fmt.Sprintf("ELSE %d ", nowMs+delay))
 		}

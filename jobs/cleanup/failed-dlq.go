@@ -2,51 +2,21 @@ package cleanup
 
 import (
 	"context"
-	"time"
 
 	"github.com/n0rdy/forq/db"
+	"github.com/n0rdy/forq/jobs"
 	"github.com/n0rdy/forq/metrics"
 
 	"github.com/rs/zerolog/log"
 )
 
-type FailedDlqMessagesCleanupJob struct {
-	repo       *db.ForqRepo
-	intervalMs int64
-	ticker     *time.Ticker
-	done       chan struct{}
-}
-
-func NewFailedDlqMessagesCleanupJob(metricsService metrics.Service, repo *db.ForqRepo, intervalMs int64) *FailedDlqMessagesCleanupJob {
-	ticker := time.NewTicker(time.Duration(intervalMs) * time.Millisecond)
-	done := make(chan struct{})
-
-	go func() {
-		for {
-			select {
-			case <-ticker.C:
-				ctx, cancelFunc := context.WithTimeout(context.Background(), time.Duration(intervalMs-1000)*time.Millisecond)
-				rowsAffected, err := repo.DeleteFailedMessagesFromDlq(ctx)
-				if err != nil {
-					log.Error().Err(err).Msg("failed to delete failed DLQ messages by FailedDlqMessagesCleanupJob")
-				} else {
-					metricsService.IncMessagesCleanupTotalBy(rowsAffected, metrics.FailedCleanupReason)
-				}
-				cancelFunc()
-			case <-done:
-				return
-			}
+func NewFailedDlqMessagesCleanupJob(metricsService metrics.Service, repo *db.ForqRepo, intervalMs int64) *jobs.Runner {
+	return jobs.NewRunner("failed-dlq-messages-cleanup", intervalMs, intervalMs-1000, func(ctx context.Context) {
+		rowsAffected, err := repo.DeleteFailedMessagesFromDlq(ctx)
+		if err != nil {
+			log.Error().Err(err).Msg("failed to delete failed DLQ messages by FailedDlqMessagesCleanupJob")
+		} else {
+			metricsService.IncMessagesCleanupTotalBy(rowsAffected, metrics.FailedCleanupReason)
 		}
-	}()
-
-	return &FailedDlqMessagesCleanupJob{
-		ticker: ticker,
-		done:   done,
-	}
-}
-
-func (j *FailedDlqMessagesCleanupJob) Close() error {
-	j.ticker.Stop()
-	close(j.done)
-	return nil
+	})
 }

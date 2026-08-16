@@ -1,0 +1,10 @@
+/* source(none) disables Tailwind's automatic source detection: it would scan
+   the working directory, including ui/static/ - the OUTPUT of this very build -
+   picking up class-like tokens from minified htmx.min.js and the previous
+   styles.css, which makes the build non-deterministic (differs between a clean
+   CI checkout and a dev machine). Only the explicit @source below is scanned. */
+@import "tailwindcss" source(none);
+@plugin "daisyui";
+
+/* the Go templates are the only place CSS classes are used */
+@source "../templates";

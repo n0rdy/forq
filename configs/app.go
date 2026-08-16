@@ -40,7 +40,7 @@ type ServerTimeouts struct {
 }
 
 func NewAppConfig(metricsEnabled bool, queueTtlHours, dlqTtlHours int) *AppConfigs {
-	pollingDurationMs := 30 * 1000
+	pollingDuration := 30 * time.Second
 
 	return &AppConfigs{
 		MessageContentMaxSizeBytes: 256 * 1024,                // 256 KB
@@ -49,7 +49,7 @@ func NewAppConfig(metricsEnabled bool, queueTtlHours, dlqTtlHours int) *AppConfi
 		BackoffDelaysMs:            []int64{1000, 5 * 1000, 15 * 1000, 30 * 1000, 60 * 1000}, // 1s, 5s, 15s, 30s, 60s
 		QueueTtlMs:                 int64(queueTtlHours) * 60 * 60 * 1000,                    // Convert hours to milliseconds
 		DlqTtlMs:                   int64(dlqTtlHours) * 60 * 60 * 1000,                      // Convert hours to milliseconds
-		PollingDurationMs:          int64(pollingDurationMs),                                 // 30 seconds
+		PollingDurationMs:          pollingDuration.Milliseconds(),                           // 30 seconds
 		MaxProcessingTimeMs:        5 * 60 * 1000,                                            // 5 minutes
 		MetricsEnabled:             metricsEnabled,
 		JobsIntervals: JobsIntervals{
@@ -59,16 +59,16 @@ func NewAppConfig(metricsEnabled bool, queueTtlHours, dlqTtlHours int) *AppConfi
 			FailedDqlMessagesCleanupMs:  89 * 60 * 1000, // 89 minutes (1h29m)
 			StaleMessagesCleanupMs:      3 * 60 * 1000,  // 3 minutes
 			QueuesDepthMetricsMs:        30 * 1000,      // 30 seconds
-			DbOptimizationMs:            1 * 60 * 1000,  // 1 hour, as SQLite docs suggest for the apps with long-running connections: https://www.sqlite.org/pragma.html#pragma_optimize
+			DbOptimizationMs:            60 * 60 * 1000, // 1 hour, as SQLite docs suggest for the apps with long-running connections: https://www.sqlite.org/pragma.html#pragma_optimize
 			DbOptimizationMaxDurationMs: 5 * 1000,       // 5 seconds max duration for PRAGMA optimize
 		},
 		ServerConfig: ServerConfig{
 			Timeouts: ServerTimeouts{
-				Handle:     time.Duration(pollingDurationMs+10) * time.Second, // 40s - polling + buffer
-				Write:      time.Duration(pollingDurationMs+15) * time.Second, // 45s - handle + write buffer
-				Read:       time.Duration(pollingDurationMs+15) * time.Second, // 45s - same as write
-				ReadHeader: 10 * time.Second,                                  // 10s - headers shouldn't take long
-				Idle:       5 * time.Minute,                                   // 5m - keep connections alive
+				Handle:     pollingDuration + 10*time.Second, // 40s - polling + buffer
+				Write:      pollingDuration + 15*time.Second, // 45s - handle + write buffer
+				Read:       pollingDuration + 15*time.Second, // 45s - same as write
+				ReadHeader: 10 * time.Second,                 // 10s - headers shouldn't take long
+				Idle:       5 * time.Minute,                  // 5m - keep connections alive
 			},
 		},
 	}

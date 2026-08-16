@@ -15,9 +15,11 @@ CREATE TABLE messages
     received_at           INTEGER NOT NULL,               -- Unix milliseconds - When the message was received
     updated_at            INTEGER NOT NULL,               -- Unix milliseconds - Last update timestamp
     expires_after         INTEGER NOT NULL                -- Unix milliseconds - When the message expires and can be deleted
-) WITHOUT ROWID;
--- WITHOUT ROWID avoids an implicit rowid column, saving space and improving performance.
--- It is safe to do that as we use UUID v7 (current timestamp-based) as primary key, and they give a good distribution in the underlying B-tree.
+);
+-- Deliberately a plain rowid table, NOT "WITHOUT ROWID": SQLite's guidance is that WITHOUT ROWID
+-- tables want rows under ~1/20th of a page, while Forq payloads are typically 1-50KB, so every row
+-- overflows. Benchmarks (benchmarks/schema) show the rowid table is 15-30% faster on the
+-- insert -> claim -> ack hot path at these row sizes, despite the extra implicit index for the TEXT id.
 
 -- Optimized indexes for read/write heavy workload
 CREATE INDEX idx_queue_ready_for_consuming ON messages (queue, status, received_at, process_after) WHERE status = 0;

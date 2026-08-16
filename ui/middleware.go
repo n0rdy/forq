@@ -6,21 +6,21 @@ import (
 
 	"github.com/n0rdy/forq/common"
 	"github.com/n0rdy/forq/services"
-	"github.com/n0rdy/forq/utils"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/justinas/nosurf"
 )
 
 // securityHeaders middleware sets HTTP security headers on every UI response.
-// CSP allows jsdelivr.net (CDN for DaisyUI, Tailwind, HTMX) and 'unsafe-inline'
-// for inline <script>/<style> blocks and HTMX hx-on attributes.
+// All assets are served from the embedded static FS, so the CSP allows only
+// 'self' - no CDNs, no inline scripts or styles.
 func securityHeaders(env string) func(http.Handler) http.Handler {
 	csp := strings.Join([]string{
 		"default-src 'self'",
-		"script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
-		"style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
+		"script-src 'self'",
+		"style-src 'self'",
 		"img-src 'self' data:",
-		"font-src 'self' https://cdn.jsdelivr.net data:",
+		"font-src 'self' data:",
 		"connect-src 'self'",
 		"object-src 'none'",
 		"frame-src 'none'",
@@ -36,6 +36,11 @@ func securityHeaders(env string) func(http.Handler) http.Handler {
 			h.Set("X-Frame-Options", "DENY")
 			h.Set("X-Content-Type-Options", "nosniff")
 			h.Set("Referrer-Policy", "same-origin")
+			// authenticated pages render message content and failure reasons;
+			// no-store keeps them out of the browser disk cache, so they can't
+			// be viewed via back/forward after logout on a shared machine.
+			// The /static/ handler overrides this for the embedded assets.
+			h.Set("Cache-Control", "no-store")
 			if env == common.ProEnv {
 				h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 			}
@@ -44,24 +49,16 @@ func securityHeaders(env string) func(http.Handler) http.Handler {
 	}
 }
 
-// loginThrottle middleware blocks login attempts from IPs that have exceeded
-// the failure threshold. Renders the login page with a rate-limit message
-// instead of just returning 429 with no body, so the UX is still recognizable.
-func loginThrottle(throttlingService *services.ThrottlingService, trustProxyHeaders bool) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			ip := utils.ClientIP(req, trustProxyHeaders)
-			if throttlingService.IsLocked(ip) {
-				data := common.LoginPageData{
-					Title: "Login",
-					Error: "Too many failed login attempts. Try again in a minute.",
-				}
-				RenderTemplateWithStatus(w, req, http.StatusTooManyRequests, "login.html", data)
-				return
-			}
-			next.ServeHTTP(w, req)
-		})
-	}
+// validateQueueName rejects queue-name URL segments outside the allowed
+// charset before they reach templates or destructive handlers.
+func validateQueueName(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if !common.IsValidQueueName(chi.URLParam(req, "queue")) {
+			http.NotFound(w, req)
+			return
+		}
+		next.ServeHTTP(w, req)
+	})
 }
 
 // sessionAuth middleware for UI routes

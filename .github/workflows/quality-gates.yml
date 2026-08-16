@@ -50,21 +50,53 @@ jobs:
       - name: Build application
         run: go build -v ./...
 
-      # Placeholder tests
-      # - name: Run tests
-      #   run: go test -v ./...
+      - name: Run tests
+        run: go test -race ./...
+
+      - name: Build benchmarks module
+        run: cd benchmarks && go build ./... && go vet ./...
+
+  # The compiled UI assets in ui/static are checked into the repo (so plain
+  # `go build` needs no node toolchain). This job rebuilds them and fails if
+  # the committed files are stale - e.g. after a Dependabot bump of daisyUI/
+  # Tailwind/HTMX in ui/package.json without regenerating the assets.
+  ui-assets-check:
+    name: UI Assets Freshness
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Rebuild UI assets
+        run: cd ui && npm ci && npm run build
+
+      - name: Verify committed assets are up to date
+        run: |
+          if [ -n "$(git status --porcelain ui/static)" ]; then
+            echo "❌ ui/static is stale - run 'npm run build' in ui/ and commit the result"
+            git diff ui/static | head -50
+            exit 1
+          fi
 
   # Prevent merging if quality checks fail
   quality-gate:
     name: Quality Gate
     runs-on: ubuntu-latest
-    needs: quality-checks
+    needs: [quality-checks, ui-assets-check]
     if: always()
-    
+
     steps:
       - name: Check quality gate status
         run: |
-          if [ "${{ needs.quality-checks.result }}" != "success" ]; then
+          if [ "${{ needs.quality-checks.result }}" != "success" ] || [ "${{ needs.ui-assets-check.result }}" != "success" ]; then
             echo "❌ Quality checks failed - blocking merge"
             exit 1
           else

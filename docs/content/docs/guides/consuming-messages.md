@@ -51,9 +51,12 @@ On success, the server will respond with a `200 OK` status code and a JSON objec
 ```json
 {
   "id": "01995e00-ea5e-74ba-9e7b-aadd93ec3618", // UUID v7 format
-  "content": "I am going on an adventure!"
+  "content": "I am going on an adventure!",
+  "receipt": "1755366229123" // opaque delivery receipt, echo it back on ack/nack
 }
 ```
+
+The `receipt` identifies this particular delivery of the message. Keep it together with the message while processing - you will need it to acknowledge or nacknowledge. Treat it as an opaque string: do not parse it.
 
 ### Acknowledge Message
 
@@ -61,7 +64,10 @@ Once you have successfully processed a message, you must acknowledge it using th
 
 ```http
 POST /queues/{queue}/messages/{messageId}/ack
+X-Forq-Receipt: {receipt}
 ```
+
+The `X-Forq-Receipt` header must carry the delivery receipt from the consume response. It fences the acknowledgment to that exact delivery: if you exceeded the max processing time and the message was already redelivered to another consumer, your stale ack gets a `404 Not Found` instead of deleting the other consumer's in-flight delivery.
 
 #### Authentication
 
@@ -71,13 +77,18 @@ All requests to the Forq API must include an `X-API-Key` header with a valid API
 
 On success, the server will respond with a `204 No Content` status code, indicating that the message was successfully acknowledged and removed from the queue.
 
+A `400 Bad Request` with the code `bad_request.receipt.missing` means the `X-Forq-Receipt` header was not sent - most likely an outdated SDK/client. A `404 Not Found` means there is no such delivery to acknowledge: the message was already acknowledged, expired, or reclaimed after the max processing time.
+
 ### Nacknowledge Message
 
 If you were unable to process a message, you can nacknowledge it using the following endpoint:
 
 ```http
 POST /queues/{queue}/messages/{messageId}/nack
+X-Forq-Receipt: {receipt}
 ```
+
+Like ack, nack requires the delivery receipt in the `X-Forq-Receipt` header and is fenced to that exact delivery.
 
 #### Authentication
 
@@ -104,6 +115,8 @@ making it available for processing again with a backoff delay (1s, 5s, 15s, 30s,
 Otherwise, for the standard queues, it will be moved to DLQ, and for DLQs, it will be deleted permanently.
 
 This is a potential source of duplicate message processing, so make sure to call ack/nack within the max processing time, and implement idempotency in your message processing logic (if possible).
+
+Note that an ack/nack sent *after* the max processing time carries a stale delivery receipt, so it cannot corrupt a redelivery that another consumer is already processing - it will simply get a `404 Not Found`. Treat that 404 as "my delivery is gone, the work may be redone by someone else".
 
 ### Consuming From DLQ
 

@@ -1,0 +1,14 @@
+{
+  "name": "forq-ui-assets",
+  "private": true,
+  "description": "Build pipeline for the Forq admin UI static assets. The generated files in static/ are checked into the repo and embedded into the forq binary, so building the Go binary does not require node. Re-run `npm run build` after changing templates or bumping these dependencies.",
+  "scripts": {
+    "build": "tailwindcss -i ./assets/input.css -o ./static/styles.css --minify && cp node_modules/htmx.org/dist/htmx.min.js static/htmx.min.js"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.1.14",
+    "daisyui": "^5.1.29",
+    "htmx.org": "^2.0.8",
+    "tailwindcss": "^4.1.14"
+  }
+}

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/n0rdy/forq/common"
 	"github.com/n0rdy/forq/services"
@@ -12,6 +13,12 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog/log"
 )
+
+// maxProduceBodyBytes bounds the produce request body before JSON decoding.
+// The content limit is 256KB, but JSON escaping can inflate a legit payload
+// (worst case 6x for \uXXXX escapes), so the cap is generous; the exact
+// content-size check still happens after decoding.
+const maxProduceBodyBytes = 2 * 1024 * 1024
 
 type Router struct {
 	monitoringService *services.MonitoringService
@@ -66,10 +73,14 @@ func (ar *Router) NewRouter() *chi.Mux {
 
 		r.Route("/queues", func(r chi.Router) {
 			r.Route("/{queue}/messages", func(r chi.Router) {
+				r.Use(ar.validateQueueName)
+
 				r.Post("/", ar.produceMessage)
 				r.Get("/", ar.consumeMessage)
 
 				r.Route("/{messageId}", func(r chi.Router) {
+					r.Use(ar.validateMessageId)
+
 					r.Post("/ack", ar.ackMessage)
 					r.Post("/nack", ar.nackMessage)
 				})
@@ -80,10 +91,38 @@ func (ar *Router) NewRouter() *chi.Mux {
 	return router
 }
 
+func (ar *Router) validateQueueName(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if !common.IsValidQueueName(chi.URLParam(req, "queue")) {
+			ar.sendErrorResponse(w, http.StatusBadRequest, common.ErrCodeBadRequestInvalidQueueName)
+			return
+		}
+		next.ServeHTTP(w, req)
+	})
+}
+
+func (ar *Router) validateMessageId(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if !common.IsValidMessageId(chi.URLParam(req, "messageId")) {
+			ar.sendErrorResponse(w, http.StatusBadRequest, common.ErrCodeBadRequestInvalidMessageId)
+			return
+		}
+		next.ServeHTTP(w, req)
+	})
+}
+
 func (ar *Router) produceMessage(w http.ResponseWriter, req *http.Request) {
+	req.Body = http.MaxBytesReader(w, req.Body, maxProduceBodyBytes)
+
 	var newMessage common.NewMessageRequest
 	err := json.NewDecoder(req.Body).Decode(&newMessage)
 	if err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			log.Error().Err(err).Msg("Request body exceeds size limit")
+			ar.sendErrorResponse(w, http.StatusRequestEntityTooLarge, common.ErrCodeBadRequestContentExceedsLimit)
+			return
+		}
 		log.Error().Err(err).Msg("Failed to decode request body")
 		ar.sendErrorResponse(w, http.StatusBadRequest, common.ErrCodeBadRequestInvalidBody)
 		return
@@ -117,8 +156,9 @@ func (ar *Router) consumeMessage(w http.ResponseWriter, req *http.Request) {
 func (ar *Router) ackMessage(w http.ResponseWriter, req *http.Request) {
 	messageId := chi.URLParam(req, "messageId")
 	queueName := chi.URLParam(req, "queue")
+	receipt := req.Header.Get(common.ReceiptHeader)
 
-	err := ar.messagesService.AckMessage(messageId, queueName, req.Context())
+	err := ar.messagesService.AckMessage(messageId, queueName, receipt, req.Context())
 	if err != nil {
 		ar.sendResponseFromError(w, err)
 		return
@@ -129,8 +169,9 @@ func (ar *Router) ackMessage(w http.ResponseWriter, req *http.Request) {
 func (ar *Router) nackMessage(w http.ResponseWriter, req *http.Request) {
 	messageId := chi.URLParam(req, "messageId")
 	queueName := chi.URLParam(req, "queue")
+	receipt := req.Header.Get(common.ReceiptHeader)
 
-	err := ar.messagesService.NackMessage(messageId, queueName, req.Context())
+	err := ar.messagesService.NackMessage(messageId, queueName, receipt, req.Context())
 	if err != nil {
 		ar.sendResponseFromError(w, err)
 		return
@@ -168,10 +209,30 @@ func (ar *Router) sendErrorResponse(w http.ResponseWriter, httpCode int, errCode
 }
 
 func (ar *Router) sendResponseFromError(w http.ResponseWriter, err error) {
-	var fe *common.ForqError
+	var fe common.ForqError
 	if errors.As(err, &fe) {
-		ar.sendJsonResponse(w, http.StatusMultiStatus, fe.Code)
+		ar.sendErrorResponse(w, httpStatusForErrorCode(fe.Code), fe.Code)
 	} else {
 		ar.sendErrorResponse(w, http.StatusInternalServerError, common.ErrCodeInternal)
+	}
+}
+
+func httpStatusForErrorCode(errCode string) int {
+	switch {
+	case strings.HasPrefix(errCode, "bad_request."):
+		return http.StatusBadRequest
+	case strings.HasPrefix(errCode, "not_found."):
+		return http.StatusNotFound
+	// the codes below are currently written directly by middleware/handlers
+	// with their status and never travel through here as ForqError values -
+	// mapped anyway so a future refactor can't silently turn them into 500s:
+	case errCode == common.ErrCodeUnauthorized:
+		return http.StatusUnauthorized
+	case errCode == common.ErrCodeTooManyRequests:
+		return http.StatusTooManyRequests
+	case errCode == common.ErrCodeServiceUnhealthy:
+		return http.StatusServiceUnavailable
+	default:
+		return http.StatusInternalServerError
 	}
 }

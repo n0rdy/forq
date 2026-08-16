@@ -107,14 +107,17 @@ curl -X GET http://localhost:8080/api/v1/queues/emails/messages \
   -H "X-API-Key: your-auth-secret-min-32-chars-long"
 ```
 
+The response contains the message `id`, its `content`, and an opaque delivery `receipt`.
+
 Acknowledge the message:
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/queues/emails/messages/{message_id}/ack \
-  -H "X-API-Key: your-auth-secret-min-32-chars-long"
+  -H "X-API-Key: your-auth-secret-min-32-chars-long" \
+  -H "X-Forq-Receipt: {receipt}"
 ```
 
-where `{message_id}` is the `id` of the message received in the previous step.
+where `{message_id}` is the `id` and `{receipt}` is the `receipt` of the message received in the previous step.
 
 ## SDKs
 
