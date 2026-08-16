@@ -51,7 +51,7 @@ You can then use the producer to send messages:
 queueName := "my-queue"
 newMessage := api.NewMessageRequest{
     Content: "I am going on an adventure!",
-    ProcessAfter: 1757875397418,
+    ProcessAfter: time.Now().Add(time.Hour).UnixMilli(), // optional: deliver in 1 hour; omit for immediate delivery
 }
 
 err := p.Produce(context.Background(), newMessage, queueName)
@@ -130,7 +130,8 @@ If you run many concurrent consumers from one JVM, raise the connection pool lim
 You can then use the producer to send messages:
 
 ```java
-var newMessage = new NewMessageRequest("I am going on an adventure!", 1757875397418);
+// processAfter is optional: pass a future Unix-ms timestamp for delayed delivery, or null for immediate
+var newMessage = new NewMessageRequest("I am going on an adventure!", System.currentTimeMillis() + 3_600_000);
 
 try {
     producer.sendMessage(newMessage, "my-queue");
@@ -227,7 +228,7 @@ You can then use the producer to send messages:
 const queueName = 'my-queue';
 const newMessage: NewMessageRequest = {
     content: 'I am going on an adventure!',
-    processAfter: 1757875397418,
+    processAfter: Date.now() + 3_600_000, // optional: deliver in 1 hour; omit for immediate delivery
 };
 
 async function sendMessageWithErrorHandling() {
