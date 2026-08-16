@@ -13,15 +13,18 @@ import (
 // in one tick is logged and swallowed so a background job can never take down
 // the whole process - the next tick runs as usual.
 type Runner struct {
-	ticker *time.Ticker
-	done   chan struct{}
+	ticker  *time.Ticker
+	done    chan struct{}
+	stopped chan struct{}
 }
 
 func NewRunner(name string, intervalMs int64, tickTimeoutMs int64, tick func(ctx context.Context)) *Runner {
 	ticker := time.NewTicker(time.Duration(intervalMs) * time.Millisecond)
 	done := make(chan struct{})
+	stopped := make(chan struct{})
 
 	go func() {
+		defer close(stopped)
 		for {
 			select {
 			case <-ticker.C:
@@ -33,8 +36,9 @@ func NewRunner(name string, intervalMs int64, tickTimeoutMs int64, tick func(ctx
 	}()
 
 	return &Runner{
-		ticker: ticker,
-		done:   done,
+		ticker:  ticker,
+		done:    done,
+		stopped: stopped,
 	}
 }
 
@@ -50,8 +54,12 @@ func runTick(name string, tickTimeoutMs int64, tick func(ctx context.Context)) {
 	tick(ctx)
 }
 
+// Close stops the runner and waits for any in-flight tick to finish, so the
+// caller knows no tick is running once Close returns - main.go closes the
+// repo after the jobs, and a still-running tick must not touch a closed DB.
 func (r *Runner) Close() error {
 	r.ticker.Stop()
 	close(r.done)
+	<-r.stopped
 	return nil
 }
