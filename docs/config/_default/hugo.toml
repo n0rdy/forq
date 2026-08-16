@@ -59,7 +59,8 @@ copyRight = "Copyright (c) 2025 Myko Nordy"
   priority = 0.5
 
 [caches]
-  [caches.getjson]
+  # "getjson"/"getcsv" cache names were merged into "getresource" in newer Hugo
+  [caches.getresource]
     dir = ":cacheDir/:project"
     maxAge = -1 # "30m"
 
