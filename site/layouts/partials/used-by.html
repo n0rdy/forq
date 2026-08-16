@@ -14,12 +14,16 @@
             {{ if .logo }}
               {{ $logo := resources.Get .logo }}
               {{ if $logo }}
-                <img
-                  src="{{ $logo.RelPermalink }}"
-                  alt="{{ .name }} logo"
-                  class="h-10 w-10 rounded object-contain flex-shrink-0"
-                  loading="lazy"
-                />
+                {{/* dark tile behind the logo so it stays readable when the
+                     card background flips to white in dark mode */}}
+                <div class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded bg-dark p-1.5">
+                  <img
+                    src="{{ $logo.RelPermalink }}"
+                    alt="{{ .name }} logo"
+                    class="max-h-full max-w-full object-contain"
+                    loading="lazy"
+                  />
+                </div>
               {{ end }}
             {{ end }}
             <h3 class="text-base font-semibold text-white dark:text-dark">
