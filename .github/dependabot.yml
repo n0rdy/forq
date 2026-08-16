@@ -23,6 +23,17 @@ updates:
       - "n0rdy"
     # Enables security updates only
     open-pull-requests-limit: 0
+  - package-ecosystem: "npm"
+    target-branch: "main"
+    directory: "/ui"
+    schedule:
+      interval: "daily"
+      time: "12:00"
+      timezone: "Europe/Oslo"
+    assignees:
+      - "n0rdy"
+    # Enables security updates only
+    open-pull-requests-limit: 0
 
   # Weekly updates for all packages
   - package-ecosystem: "gomod"
@@ -49,5 +60,20 @@ updates:
       - "n0rdy"
     groups:
       github-actions:
+        patterns:
+          - "**"
+  # UI static assets pipeline (daisyUI, Tailwind, HTMX). After a bump, the
+  # ui-assets-check CI job requires regenerating ui/static via `npm run build`.
+  - package-ecosystem: "npm"
+    directory: "/ui"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+      time: "12:00"
+      timezone: "Europe/Oslo"
+    assignees:
+      - "n0rdy"
+    groups:
+      ui-assets:
         patterns:
           - "**"

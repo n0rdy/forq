@@ -40,6 +40,16 @@ func (ur *Router) NewRouter() *chi.Mux {
 	router.Use(securityHeaders(ur.env))
 	router.Use(csrfPrevention(ur.csrfErrorHandler, ur.env))
 
+	// embedded static assets (CSS, HTMX, theme script) - unauthenticated, as
+	// the login page needs them too. Cacheable (overriding the no-store set by
+	// securityHeaders): the assets only change on releases, and 1 hour of
+	// staleness after an upgrade is acceptable.
+	staticHandler := http.FileServerFS(staticFS)
+	router.Handle("/static/*", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Cache-Control", "public, max-age=3600")
+		staticHandler.ServeHTTP(w, req)
+	}))
+
 	// unprotected login routes (failed attempts are throttled in processLogin):
 	router.Get("/login", ur.loginPage)
 	router.Post("/login", ur.processLogin)

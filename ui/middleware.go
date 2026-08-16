@@ -12,15 +12,15 @@ import (
 )
 
 // securityHeaders middleware sets HTTP security headers on every UI response.
-// CSP allows jsdelivr.net (CDN for DaisyUI, Tailwind, HTMX) and 'unsafe-inline'
-// for inline <script>/<style> blocks and HTMX hx-on attributes.
+// All assets are served from the embedded static FS, so the CSP allows only
+// 'self' - no CDNs, no inline scripts or styles.
 func securityHeaders(env string) func(http.Handler) http.Handler {
 	csp := strings.Join([]string{
 		"default-src 'self'",
-		"script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
-		"style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
+		"script-src 'self'",
+		"style-src 'self'",
 		"img-src 'self' data:",
-		"font-src 'self' https://cdn.jsdelivr.net data:",
+		"font-src 'self' data:",
 		"connect-src 'self'",
 		"object-src 'none'",
 		"frame-src 'none'",
@@ -36,6 +36,11 @@ func securityHeaders(env string) func(http.Handler) http.Handler {
 			h.Set("X-Frame-Options", "DENY")
 			h.Set("X-Content-Type-Options", "nosniff")
 			h.Set("Referrer-Policy", "same-origin")
+			// authenticated pages render message content and failure reasons;
+			// no-store keeps them out of the browser disk cache, so they can't
+			// be viewed via back/forward after logout on a shared machine.
+			// The /static/ handler overrides this for the embedded assets.
+			h.Set("Cache-Control", "no-store")
 			if env == common.ProEnv {
 				h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 			}

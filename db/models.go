@@ -13,6 +13,9 @@ type NewMessage struct {
 type MessageForConsuming struct {
 	Id      string
 	Content string
+	// ProcessingStartedAt fences this delivery: it is returned to the consumer
+	// as the receipt and must match on ack/nack.
+	ProcessingStartedAt int64
 }
 
 type MessageMetadata struct {

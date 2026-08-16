@@ -104,8 +104,8 @@ All configuration via environment variables:
 
 ### Message Processing Flow
 1. Messages sent to queue via `POST /api/v1/queues/{queue}/messages`
-2. Consumers poll via `GET /api/v1/queues/{queue}/messages` (30s long polling)
-3. Processing acknowledgment via `POST /api/v1/queues/{queue}/messages/{messageId}/ack`
+2. Consumers poll via `GET /api/v1/queues/{queue}/messages` (30s long polling); the response includes an opaque delivery `receipt`
+3. Processing acknowledgment via `POST /api/v1/queues/{queue}/messages/{messageId}/ack` with the receipt echoed in the `X-Forq-Receipt` header (same for nack); the receipt fences ack/nack to that exact delivery
 4. Failed messages retry with exponential backoff, eventually moved to DLQ
 5. Background jobs handle cleanup of expired messages and timeout detection
 

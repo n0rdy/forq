@@ -9,6 +9,8 @@ const (
 	ErrCodeBadRequestInvalidMessageId    = "bad_request.messageId.invalid"
 	ErrCodeBadRequestProduceToDlq        = "bad_request.queue.produce_to_dlq"
 	ErrCodeBadRequestDlqOnlyOp           = "bad_request.dlq_only_operation"
+	ErrCodeBadRequestReceiptMissing      = "bad_request.receipt.missing"
+	ErrCodeBadRequestReceiptInvalid      = "bad_request.receipt.invalid"
 	ErrCodeUnauthorized                  = "unauthorized"
 	ErrCodeTooManyRequests               = "too_many_requests"
 	ErrCodeNotFoundMessage               = "not_found.message"
@@ -24,6 +26,8 @@ var (
 	ErrBadRequestInvalidMessageId    = ForqError{Code: ErrCodeBadRequestInvalidMessageId}
 	ErrBadRequestProduceToDlq        = ForqError{Code: ErrCodeBadRequestProduceToDlq}
 	ErrBadRequestDlqOnlyOp           = ForqError{Code: ErrCodeBadRequestDlqOnlyOp}
+	ErrBadRequestReceiptMissing      = ForqError{Code: ErrCodeBadRequestReceiptMissing}
+	ErrBadRequestReceiptInvalid      = ForqError{Code: ErrCodeBadRequestReceiptInvalid}
 	ErrNotFoundMessage               = ForqError{Code: ErrCodeNotFoundMessage}
 	ErrInternal                      = ForqError{Code: ErrCodeInternal}
 )

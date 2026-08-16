@@ -4,33 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{.Data.Title}} - Forq Admin UI</title>
-    
-    <!-- DaisyUI v5 + Tailwind CSS (Official CDN) -->
-    <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-    
+
+    <!-- Tailwind CSS + DaisyUI, precompiled and embedded into the binary -->
+    <link href="/static/styles.css" rel="stylesheet" type="text/css" />
+
     <!-- HTMX -->
-    <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.6/dist/htmx.min.js"></script>
-    
-    <!-- Custom styles if needed -->
-    <style>
-        /* Custom overrides can go here */
-    </style>
+    <script src="/static/htmx.min.js"></script>
 </head>
 <body class="min-h-screen bg-base-200">
     {{template "content" .}}
-    
-    <script>
-        // Theme management
-        (function() {
-            const htmlRoot = document.getElementById('html-root');
-            
-            // Get saved theme or default to light
-            const savedTheme = localStorage.getItem('forq-theme') || 'light';
-            
-            // Apply theme on page load
-            htmlRoot.setAttribute('data-theme', savedTheme);
-        })();
-    </script>
+
+    <script src="/static/theme.js"></script>
 </body>
 </html>

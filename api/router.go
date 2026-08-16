@@ -156,8 +156,9 @@ func (ar *Router) consumeMessage(w http.ResponseWriter, req *http.Request) {
 func (ar *Router) ackMessage(w http.ResponseWriter, req *http.Request) {
 	messageId := chi.URLParam(req, "messageId")
 	queueName := chi.URLParam(req, "queue")
+	receipt := req.Header.Get(common.ReceiptHeader)
 
-	err := ar.messagesService.AckMessage(messageId, queueName, req.Context())
+	err := ar.messagesService.AckMessage(messageId, queueName, receipt, req.Context())
 	if err != nil {
 		ar.sendResponseFromError(w, err)
 		return
@@ -168,8 +169,9 @@ func (ar *Router) ackMessage(w http.ResponseWriter, req *http.Request) {
 func (ar *Router) nackMessage(w http.ResponseWriter, req *http.Request) {
 	messageId := chi.URLParam(req, "messageId")
 	queueName := chi.URLParam(req, "queue")
+	receipt := req.Header.Get(common.ReceiptHeader)
 
-	err := ar.messagesService.NackMessage(messageId, queueName, req.Context())
+	err := ar.messagesService.NackMessage(messageId, queueName, receipt, req.Context())
 	if err != nil {
 		ar.sendResponseFromError(w, err)
 		return

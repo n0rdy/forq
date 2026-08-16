@@ -1,0 +1,5 @@
+@import "tailwindcss";
+@plugin "daisyui";
+
+/* scan the Go templates for class names; nothing else in this repo holds CSS classes */
+@source "../templates";

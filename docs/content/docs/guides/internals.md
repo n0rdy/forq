@@ -94,9 +94,7 @@ CREATE TABLE messages
     received_at           INTEGER NOT NULL,               -- Unix milliseconds - When the message was received
     updated_at            INTEGER NOT NULL,               -- Unix milliseconds - Last update timestamp
     expires_after         INTEGER NOT NULL                -- Unix milliseconds - When the message expires and can be deleted
-) WITHOUT ROWID;
--- WITHOUT ROWID avoids an implicit rowid column, saving space and improving performance.
--- It is safe to do that as we use UUID v7 (current timestamp-based) as primary key, and they give a good distribution in the underlying B-tree.
+);
 
 -- Optimized indexes for read/write heavy workload
 CREATE INDEX idx_queue_ready_for_consuming ON messages (queue, status, received_at, process_after) WHERE status = 0;
@@ -284,19 +282,6 @@ It is set by Forq whenever the message is updated. Might be handy for the inspec
 A Unix timestamp in milliseconds that indicates when the message expires based on configured TTL for Standard Queues and DLQs.
 It is set by Forq when the message is received.
 
-#### WITHOUT ROWID
-
-By default, SQLite tables have an implicit `rowid` column, which is a 64-bit signed integer that uniquely identifies each row in the table.
-It is a [éminence grise](https://en.wikipedia.org/wiki/%C3%89minence_grise) that serves as the primary key even if you have an explicit primary key.
-
-It exists to ensure that the underlying B-tree structure of the table is always balanced and efficient for lookups.
-This becomes quite handy if the actual primary key is random, like UUID v4.
-
-It's not the case for Forq, as we use UUID v7, which is time-based and gives a good distribution in the underlying B-tree.
-Therefore, we can safely disable the implicit `rowid` column by using the `WITHOUT ROWID` clause in the table definition.
-
-My local benchmarking shows a tiny performance improvement, but the main benefit is the reduced storage space.
-
 #### Indexes
 
 I spent a lot of back-and-forth time thinking and playing with `EXPLAIN QUERY PLAN` to come up with the optimal set of indexes for the use case Forq is targeting.
@@ -330,7 +315,9 @@ There are ways to mitigate this. Let's focus on these two:
 - limiting the number of writer connections to 1 - this is the most effective way to mitigate the "SQLITE_BUSY" errors, as it ensures that there is only one writer connection at any given time.
 
 After considerations, benchmarking, and [consulting with Reddit SQLite community](https://www.reddit.com/r/sqlite/comments/1nfvbh1/whats_more_performant_for_concurrent_writes_a_1/), 
-I decided to go with the second approach in Forq. I find this approach more reliable, as timeouts are always a bit of a gamble, and I'd rather not go there.
+I decided to go with the second approach in Forq as the primary mechanism: the single write connection makes "SQLITE_BUSY" structurally unlikely.
+On top of that, both pools also set `PRAGMA busy_timeout = 5000` as a belt-and-braces measure - rare events like WAL checkpointing can still briefly lock the DB, 
+and it's better to wait a few seconds than to fail a request with a hard error.
 
 What that means in practice is that I have 2 separate connection pools in Forq:
 - a pool for read-only connections, which is for read-only operations with `(2 * number of CPU cores) + 1` connections
@@ -439,7 +426,9 @@ API exposes a single endpoint for sending messages to the queue: `POST /api/v1/q
 }
 ```
 
-The `content` filed is required, and must not exceed 256 KB in size. 
+The `content` filed is required, and must not exceed 256 KB in size. The request body itself is capped 
+with `http.MaxBytesReader` before decoding (with generous headroom for JSON escaping), so an oversized body is rejected 
+with a `413` without buffering it into memory. 
 The `processAfter` field is optional, and if not provided, the message will be available for processing immediately. 
 Process after can be set to up to 366 days in the future, and must not be in the past.
 
@@ -454,11 +443,16 @@ As you already know, queues are virtual entities in Forq, so Forq doesn't care w
 While powerful, this also comes with a caveat that Forq won't catch if you make a typo in the queue name, and will happily "create" a new queue for you.
 Forq is very welcoming, as you can see =)
 
+That said, queue names are validated at the API boundary: they must match `^[a-zA-Z0-9._-]{1,64}$`. 
+This keeps names safe as URL segments in the Admin UI and bounds the Prometheus label charset, without limiting any sane naming scheme.
+
 The producer logic is quite simple and straightforward: it validates the input, generates a UUID v7 for the message ID, sets the timestamps, and inserts the message into the DB. 
 Check the `messages.go` file in the `services` package for the full implementation.
 
 Please, note that producer logic always assumes that the message is being sent to the standard queue, not to the DLQ. Therefore, the `is_dlq` field is always set to `FALSE` when inserting the message.
-Please, don't try to send messages to `{queue}-dlq` queue, as it's not the intended use case. I guess it's a safe ask to avoid using `-dlq` suffix for your standard queues.
+Producing directly into a `{queue}-dlq` queue is rejected with a `400` (`bad_request.queue.produce_to_dlq`): 
+messages enter DLQs only via the failure/expiry paths, which keeps the `is_dlq` column and the `-dlq` naming convention consistent. 
+Consuming from a DLQ is still allowed.
 
 Some might say that there is a way to make it even faster by using the asynchronous processing, 
 where the API would just accept the message, place it into the channel, and return a response to the client, while the actual DB insertion would be done in the background.
@@ -528,7 +522,9 @@ for {
 		ms.metricsService.IncMessagesConsumedTotalBy(1, queueName)
 		return &common.MessageResponse{
 			Id:      message.Id,
-			Content: message.Content,}, nil
+			Content: message.Content,
+			Receipt: strconv.FormatInt(message.ProcessingStartedAt, 10),
+		}, nil
 	}
 
 	// no message found, check if we should keep polling. Return nil if polling duration exceeded
@@ -538,13 +534,15 @@ for {
 
 	select {
 	case <-ticker.C:
-		// continue polling case <-ctx.Done():
-		// client disconnected, stop polling and return
-		log.Error().Err(ctx.Err()).Msg("context cancelled while fetching message")
-		return nil, common.ErrInternal
+		// continue polling
+	case <-ctx.Done():
+		// client disconnected or request timed out - normal for long polling, not an error
+		return nil, nil
 	}
 }
 ```
+
+A client that hangs up mid-poll (or a request that times out) is a completely normal event for long polling, so a cancelled context simply ends the poll quietly - no error logged, no error response.
 
 If 500 ms sounds like a lot, remember the 1 single writer limitation of SQLite. Wait a minute, why do we need writer to fetch the messages? 
 Good question, we'll get to very soon.
@@ -592,7 +590,7 @@ query := `
         ORDER BY received_at ASC
         LIMIT 1
     )
-    RETURNING id, content;`
+    RETURNING id, content, processing_started_at;`
 
 var msg MessageForConsuming
 err := fr.dbWrite.QueryRowContext(ctx, query,
@@ -602,14 +600,14 @@ err := fr.dbWrite.QueryRowContext(ctx, query,
 	queueName,               // WHERE queue = ?
 	common.ReadyStatus,      // AND status = ?
 	nowMs,                   // AND process_after <= ?
-).Scan(&msg.Id, &msg.Content)
+).Scan(&msg.Id, &msg.Content, &msg.ProcessingStartedAt)
 ```
 
 As you can see, we are using a single `UPDATE ... WHERE id = (SELECT ...) RETURNING ...` statement to fetch the next message for processing.
 What happens here is:
 - we are selecting the oldest message from the queue in the `ready` state that is not delayed (i.e., `process_after` is in the past)
 - if found, we are updating its status to `processing`, setting the `processing_started_at` timestamp, and incrementing the `attempts` counter
-- the `RETURNING` clause returns the `id` and `content` of the updated message
+- the `RETURNING` clause returns the `id`, `content`, and `processing_started_at` of the updated message; the latter is sent to the consumer as the opaque delivery `receipt` that fences ack/nack to this exact delivery (more on that below)
 
 We use `dbWrite` connection pool here, as we are performing a write operation, so data race is not possible, even if multiple consumers are trying to fetch messages from the same queue concurrently.
 
@@ -650,23 +648,25 @@ Otherwise, the message becomes stale. Let's discuss these scenarios next.
 
 #### Acknowledging the message (Ack)
 
-The consumer API exposes a single endpoint for acknowledging the message: `POST /api/v1/queues/{queue}/messages/{messageId}/ack`. No request body is needed.
+The consumer API exposes a single endpoint for acknowledging the message: `POST /api/v1/queues/{queue}/messages/{messageId}/ack`. 
+No request body is needed, but the `X-Forq-Receipt` header must carry the delivery receipt from the consume response.
 
-The underlying logic is quite simple: Forq tries to permanently delete the message from the DB by its ID and queue name.
-Regardless of whether the message exists or not, Forq returns a `204 No Content` response to the client. 
-Idempotency by design.
+The underlying logic is quite simple: Forq tries to permanently delete the message from the DB by its ID, queue name, and delivery receipt.
+If no row matches (the message was already acknowledged, expired, or reclaimed and redelivered to another consumer), Forq returns a `404 Not Found`,
+so the consumer knows its delivery is gone.
 
 Here is the code snippet for the DB query:
 
 ```go
 query := `
     DELETE FROM messages
-    WHERE id = ? AND queue = ? AND status = ?;`
+    WHERE id = ? AND queue = ? AND status = ? AND processing_started_at = ?;`
 
 result, err := fr.dbWrite.ExecContext(ctx, query,
     messageId,               // WHERE id = ?
     queueName,               // AND queue = ?
     common.ProcessingStatus, // AND status = ?
+    receipt,                 // AND processing_started_at = ?
 )
 ```
 
@@ -675,6 +675,9 @@ The `queue = ?` part is just an additional safety check to ensure that the consu
 Same for `status = ?`, which ensures that the message is in the `processing` state, and not in the `ready` or `failed` state. The latter can theoretically happen if the message becomes stale while being processed.
 This doesn't drain performance, as the primary key lookup is already fast enough, and SQLite knows that there can be at most 1 row matching the `id`, so it doesn't need to scan the entire table.
 
+The `processing_started_at = ?` part is the delivery fencing: every claim stamps a fresh `processing_started_at`, and that value is what the consumer got as its `receipt`. 
+A consumer that exceeded the max processing time holds a stale receipt, so its late ack matches 0 rows and cannot delete a redelivery that another consumer is actively processing.
+
 It is critically important to acknowledge the message after its being processed successfully, as otherwise, the message might be reprocessed by another consumer.
 Duplicates are bad, mkay?
 
@@ -682,7 +685,8 @@ Due to this possible scenario (or acknowledging after the max processing time), 
 
 #### Nacknowledging the message (Nack)
 
-The consumer API exposes a single endpoint for nacknowledging the message: `POST /api/v1/queues/{queue}/messages/{messageId}/nack`. No request body is needed.
+The consumer API exposes a single endpoint for nacknowledging the message: `POST /api/v1/queues/{queue}/messages/{messageId}/nack`. 
+No request body is needed, but like ack, the `X-Forq-Receipt` header must carry the delivery receipt - a late nack with a stale receipt matches 0 rows instead of resetting another consumer's in-flight delivery.
 
 This endpoint should be used by the consumer when it fails to process the message, and wants to requeue it for later processing.
 Failures can happen due to many reasons, like temporary network issues, external service being down, etc., 
@@ -705,7 +709,7 @@ query := fmt.Sprintf(`
         END,
         processing_started_at = NULL,
         updated_at = ?
-    WHERE id = ? AND queue = ? AND status = ?;`, fr.processAfterCases(nowMs))
+    WHERE id = ? AND queue = ? AND status = ? AND processing_started_at = ?;`, fr.processAfterCases(nowMs))
 
 result, err := fr.dbWrite.ExecContext(ctx, query,
 	fr.appConfigs.MaxDeliveryAttempts, // WHEN attempts = ? (status check)
@@ -715,6 +719,7 @@ result, err := fr.dbWrite.ExecContext(ctx, query,
 	messageId,                         // WHERE id = ?
 	queueName,                         // AND queue = ?
 	common.ProcessingStatus,           // AND status = ?
+	receipt,                           // AND processing_started_at = ?
 )
 ```
 
@@ -724,10 +729,12 @@ where `fr.processAfterCases(nowMs)` is:
 func (fr *ForqRepo) processAfterCases(nowMs int64) string {
 	var processAfterCases strings.Builder
 
-	// builds WHEN clauses for each backoff delay
+	// builds WHEN clauses for each backoff delay.
+	// `attempts` was already incremented when the message was claimed for
+	// consuming, so the first failed delivery arrives here with attempts = 1.
 	for i, delay := range fr.appConfigs.BackoffDelaysMs {
 		if i < len(fr.appConfigs.BackoffDelaysMs)-1 {
-			processAfterCases.WriteString(fmt.Sprintf("WHEN attempts + 1 = %d THEN %d ", i+1, nowMs+delay))
+			processAfterCases.WriteString(fmt.Sprintf("WHEN attempts = %d THEN %d ", i+1, nowMs+delay))
 		} else {
 			processAfterCases.WriteString(fmt.Sprintf("ELSE %d ", nowMs+delay))
 		}
@@ -746,15 +753,16 @@ SET
     	ELSE 0						-- ready if there are attempts left
     END,
     process_after = CASE 
-        WHEN attempts + 1 = 1 THEN $now + 1000 
-        WHEN attempts + 1 = 2 THEN $now + 5000 
-        WHEN attempts + 1 = 3 THEN $now + 15000 
-        WHEN attempts + 1 = 4 THEN $now + 30000 
+        WHEN attempts = 1 THEN $now + 1000 
+        WHEN attempts = 2 THEN $now + 5000 
+        WHEN attempts = 3 THEN $now + 15000 
+        WHEN attempts = 4 THEN $now + 30000 
         ELSE $now + 60000 
     END,
     processing_started_at = NULL,
     updated_at = $now
-WHERE id = '0199164b-4dea-78d9-9b4c-c699d5037962' AND queue = 'emails' AND status = 1;  -- 1 is Processing
+WHERE id = '0199164b-4dea-78d9-9b4c-c699d5037962' AND queue = 'emails' AND status = 1  -- 1 is Processing
+  AND processing_started_at = 1755366229123;  -- the delivery receipt
 ```
 
 `$now` is just a placeholder for the current timestamp in milliseconds, as I don't know how else to show it here.
@@ -889,22 +897,25 @@ query := `
         failure_reason = ?,
         updated_at = ?,
         expires_after = ?
-    WHERE status != ? AND is_dlq = FALSE AND expires_after < ?;`
-
-res, err := fr.dbWrite.ExecContext(ctx, query,
-	common.ReadyStatus,                 // status = ?
-	common.DlqSuffix,                   // queue = queue || ?
-	nowMs,                              // process_after = ?
-	common.MessageExpiredFailureReason, // failure_reason = ?
-	nowMs,                              // updated_at = ?
-	nowMs+fr.appConfigs.DlqTtlMs,       // expires_after = ?
-	common.ProcessingStatus,            // WHERE status != ?
-	nowMs,                              // AND expires_after < ?
-)
+    WHERE id IN (
+        SELECT id FROM messages
+        WHERE status IN (?, ?) AND is_dlq = FALSE AND expires_after < ?
+        LIMIT ?
+    );`
+// executed in a loop with LIMIT 1000 batches until fewer than 1000 rows are affected,
+// with a context check between batches
 ```
 
-Query updates all expired messages in the standard queues that are not in the `processing` state (i.e., `ready` or `failed`), 
+Query updates all expired messages in the standard queues that are in the `ready` or `failed` state, 
 and moves them to the corresponding DLQs by appending `-dlq` suffix to the queue name.
+
+Two details worth calling out:
+
+- `status IN (ready, failed)` instead of `status != processing`: SQLite can't use an index whose leading column is constrained by `!=`, 
+  while `IN` with literals expands into two efficient index range scans over `idx_expired`.
+- the sweep runs in `LIMIT 1000` batches: a single unbounded `UPDATE` over a large expired backlog would hold the one write connection 
+  for the whole sweep, stalling all produces/consumes/acks in the meantime. Batching releases the connection between chunks, 
+  and an interrupted sweep simply continues on the next tick.
 Attempts counter is reset to 0.
 A new `expires_after` timestamp is set based on the DLQ TTL configuration. The default is 7 days, but you can override it via `FORQ_DLQ_TTL_HOURS` environment variable.
 
@@ -925,17 +936,17 @@ This flow is quite simple, as we just need to delete the messages that are expir
 ```go
 query := `
     DELETE FROM messages
-    WHERE status != ? AND is_dlq = TRUE AND expires_after < ?;`
-
-res, err := fr.dbWrite.ExecContext(ctx, query,
-	common.ProcessingStatus, // WHERE status != ?
-	nowMs,                   // expires_after < ?
-)
+    WHERE id IN (
+        SELECT id FROM messages
+        WHERE status IN (?, ?) AND is_dlq = TRUE AND expires_after < ?
+        LIMIT ?
+    );`
+// executed in the same LIMIT 1000 batch loop as the regular-queue sweep
 ```
 
-We are filtering out messages in the `processing` state, as they might be being processed by the consumers, and we don't want to interfere with that.
+We are filtering out messages in the `processing` state (by selecting only `ready` and `failed`), as they might be being processed by the consumers, and we don't want to interfere with that.
 
-This query uses the `idx_expired` covering index as well, so it is very fast.
+This query uses the `idx_expired` covering index as well (see the previous section for why `status IN` matters here), so it is very fast.
 
 #### FailedMessagesCleanupJob
 
@@ -1084,7 +1095,12 @@ Even with a 32+ character `FORQ_AUTH_SECRET`, leaving login endpoints completely
 
 Forq tracks failed authentication attempts per IP and locks out IPs that exceed a threshold within a sliding window. Defaults: 5 failures within 1 minute trigger a 1-minute lockout. After the lockout expires, the IP gets a fresh budget of 5 attempts. None of these are configurable - opinionated as always.
 
-The throttling is shared between the UI login form and the API key auth - same auth secret, same protection bucket. If you fail 5 times via the API and then try the UI login, you're already locked out. Intentional: a brute-force attack on Forq doesn't care which entry point it uses.
+One important ordering detail: the secret is checked **first** (with `subtle.ConstantTimeCompare`, so no timing side channel), and the lockout is only consulted - and failures only recorded - when the check fails. 
+A valid API key or admin token always works, even from an IP that is currently locked out. 
+This matters behind a reverse proxy without `FORQ_TRUST_PROXY_HEADERS`: all clients share the proxy's IP there, and an attacker spamming bogus keys must not be able to lock out your legitimate producers and consumers. 
+The lockout only ever throttles actual failures.
+
+The throttling is shared between the UI login form and the API key auth - same auth secret, same protection bucket. If you fail 5 times via the API and then try the UI login with a wrong token, you're already locked out. Intentional: a brute-force attack on Forq doesn't care which entry point it uses.
 
 Let me show you the data structure from `services/throttling.go`:
 
@@ -1136,7 +1152,7 @@ Btw, I considered using a cache library like [otter](https://github.com/maypok86
 
 ### Client IP detection
 
-Throttling is only as good as the IP you key it on. When Forq is exposed directly to clients, `RemoteAddr` is the right answer - it's the actual TCP peer. But Forq is recommended to run behind a reverse proxy in production, and in that case every request looks like it comes from the proxy's IP. Throttle by `RemoteAddr` and you've effectively turned login throttling into "if anyone fails 5 times, everyone is locked out for a minute." That's not throttling, that's collective punishment.
+Throttling is only as good as the IP you key it on. When Forq is exposed directly to clients, `RemoteAddr` is the right answer - it's the actual TCP peer. But Forq is recommended to run behind a reverse proxy in production, and in that case every request looks like it comes from the proxy's IP. Throttle by `RemoteAddr` there and every *failed* attempt lands in one shared bucket - valid credentials still always pass (see the ordering detail above), but anyone probing with wrong keys gets everyone's failure budget spent for a minute at a time.
 
 The naive fix is to read `X-Forwarded-For` always. The naive fix has its own footgun: if Forq is exposed directly, attackers can set whatever XFF they want and Forq will dutifully throttle their fake IP while the real attacker keeps probing.
 
@@ -1184,14 +1200,17 @@ Both the API and the UI apply a baseline of HTTP security headers via middleware
 
 The UI gets:
 
-- `Content-Security-Policy` allowing `'self'` + `cdn.jsdelivr.net` (where DaisyUI/Tailwind/HTMX are loaded from) + `'unsafe-inline'` for inline `<script>`/`<style>` blocks and HTMX's `hx-on:*` event attributes
+- `Content-Security-Policy` allowing `'self'` only - all assets (precompiled Tailwind+DaisyUI CSS, HTMX, the theme script) are embedded into the binary and served from `/static/`, so no CDN hosts and no `'unsafe-inline'` are needed
 - `X-Frame-Options: DENY` and `frame-ancestors 'none'` (clickjacking)
 - `X-Content-Type-Options: nosniff` (MIME sniffing)
 - `Referrer-Policy: same-origin`
 - `object-src 'none'`, `frame-src 'none'`, `base-uri 'self'`, `form-action 'self'` to lock down what `default-src 'self'` would otherwise permit
 - `Strict-Transport-Security` (only when `FORQ_ENV=pro`)
 
-The `'unsafe-inline'` in `script-src` is a CSP weakening I accepted reluctantly. HTMX uses inline event attributes (`hx-on:click="..."` and friends), and reworking the entire UI to use nonces every render is a complexity bomb. The realistic alternative would be to switch the frontend to a different stack, which I'm not going to do for a marginal CSP gain. So `'unsafe-inline'` stays, and we lean on the rest of the headers + CSRF + session auth for defense-in-depth.
+Earlier versions loaded DaisyUI/Tailwind/HTMX from `cdn.jsdelivr.net` and used inline `<script>` blocks, which forced `'unsafe-inline'` and a CDN host into the CSP. 
+Now the CSS is precompiled at build time (`npm run build` in `ui/`, output checked into the repo and embedded via `go:embed`), HTMX is vendored, 
+and the theme script is a served static file. That makes the Admin UI fully self-contained (works offline, nothing leaks to a third-party CDN), 
+removes the supply-chain exposure of floating CDN versions, and lets the CSP be strict `'self'` with no inline anything.
 
 The API gets a leaner subset: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, and HSTS in pro. No CSP because there's no rendering - JSON responses don't have a script context.
 

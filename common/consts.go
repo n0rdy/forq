@@ -3,6 +3,9 @@ package common
 const (
 	DlqSuffix = "-dlq"
 
+	// ReceiptHeader carries the delivery receipt on ack/nack requests.
+	ReceiptHeader = "X-Forq-Receipt"
+
 	// envs:
 	LocalEnv = "local"
 	ProEnv   = "pro"

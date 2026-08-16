@@ -105,21 +105,36 @@ func (ts *ThrottlingService) RecordFailure(ip string) {
 	}
 }
 
-// evictOldestEntryLocked removes the entry with the smallest lastSeenMs.
-// Used as a memory-DoS guard when the entry map hits its hard cap. Caller
-// must hold ts.mu.
+// evictOldestEntryLocked removes the entry with the smallest lastSeenMs,
+// preferring entries that are not currently locked out: an attacker flooding
+// the map with fresh failures from many IPs must not be able to flush their
+// own lockout early. Only if every entry is locked does it fall back to
+// evicting the oldest locked one. Used as a memory-DoS guard when the entry
+// map hits its hard cap. Caller must hold ts.mu.
 func (ts *ThrottlingService) evictOldestEntryLocked() {
-	var oldestIP string
-	var oldestMs int64
-	first := true
+	nowMs := time.Now().UnixMilli()
+
+	var oldestUnlockedIP, oldestLockedIP string
+	var oldestUnlockedMs, oldestLockedMs int64
 	for ip, e := range ts.entries {
-		if first || e.lastSeenMs < oldestMs {
-			oldestMs = e.lastSeenMs
-			oldestIP = ip
-			first = false
+		if nowMs < e.lockedUntil {
+			if oldestLockedIP == "" || e.lastSeenMs < oldestLockedMs {
+				oldestLockedMs = e.lastSeenMs
+				oldestLockedIP = ip
+			}
+		} else {
+			if oldestUnlockedIP == "" || e.lastSeenMs < oldestUnlockedMs {
+				oldestUnlockedMs = e.lastSeenMs
+				oldestUnlockedIP = ip
+			}
 		}
 	}
-	delete(ts.entries, oldestIP)
+
+	if oldestUnlockedIP != "" {
+		delete(ts.entries, oldestUnlockedIP)
+		return
+	}
+	delete(ts.entries, oldestLockedIP)
 }
 
 func (ts *ThrottlingService) Close() error {

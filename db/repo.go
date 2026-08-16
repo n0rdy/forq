@@ -166,7 +166,7 @@ func (fr *ForqRepo) SelectMessageForConsuming(queueName string, ctx context.Cont
             ORDER BY received_at ASC
             LIMIT 1
         )
-        RETURNING id, content;`
+        RETURNING id, content, processing_started_at;`
 
 	var msg MessageForConsuming
 	err := fr.dbWrite.QueryRowContext(ctx, query,
@@ -176,7 +176,7 @@ func (fr *ForqRepo) SelectMessageForConsuming(queueName string, ctx context.Cont
 		queueName,               // WHERE queue = ?
 		common.ReadyStatus,      // AND status = ?
 		nowMs,                   // AND process_after <= ?
-	).Scan(&msg.Id, &msg.Content)
+	).Scan(&msg.Id, &msg.Content, &msg.ProcessingStartedAt)
 
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -339,22 +339,25 @@ func (fr *ForqRepo) SelectMessagesForUI(queueName string, cursor string, limit i
 	return messages, nil
 }
 
-func (fr *ForqRepo) UpdateMessageOnConsumingFailure(messageId string, queueName string, ctx context.Context) error {
+func (fr *ForqRepo) UpdateMessageOnConsumingFailure(messageId string, queueName string, receipt int64, ctx context.Context) error {
 	nowMs := time.Now().UnixMilli()
 
+	// processing_started_at = receipt fences the nack to this exact delivery:
+	// a late nack from a consumer whose message was already reclaimed and
+	// redelivered carries a stale receipt and matches 0 rows.
 	query := fmt.Sprintf(`
-        UPDATE messages 
-        SET 
-            status = CASE 
+        UPDATE messages
+        SET
+            status = CASE
             	WHEN attempts >= ? THEN ?	-- failed if no more attempts left
             	ELSE ?						-- ready if there are attempts left
 			END,
-            process_after = CASE 
+            process_after = CASE
                 %s
             END,
             processing_started_at = NULL,
             updated_at = ?
-        WHERE id = ? AND queue = ? AND status = ?;`, fr.processAfterCases(nowMs))
+        WHERE id = ? AND queue = ? AND status = ? AND processing_started_at = ?;`, fr.processAfterCases(nowMs))
 
 	result, err := fr.dbWrite.ExecContext(ctx, query,
 		fr.appConfigs.MaxDeliveryAttempts, // WHEN attempts = ? (status check)
@@ -364,6 +367,7 @@ func (fr *ForqRepo) UpdateMessageOnConsumingFailure(messageId string, queueName 
 		messageId,                         // WHERE id = ?
 		queueName,                         // AND queue = ?
 		common.ProcessingStatus,           // AND status = ?
+		receipt,                           // AND processing_started_at = ?
 	)
 
 	if err != nil {
@@ -636,15 +640,18 @@ func (fr *ForqRepo) DeleteMessageFromDlq(messageId string, queueName string, ctx
 	return nil
 }
 
-func (fr *ForqRepo) DeleteMessageOnAck(messageId string, queueName string, ctx context.Context) error {
+func (fr *ForqRepo) DeleteMessageOnAck(messageId string, queueName string, receipt int64, ctx context.Context) error {
+	// processing_started_at = receipt fences the ack to this exact delivery -
+	// see UpdateMessageOnConsumingFailure for the rationale.
 	query := `
 		DELETE FROM messages
-		WHERE id = ? AND queue = ? AND status = ?;`
+		WHERE id = ? AND queue = ? AND status = ? AND processing_started_at = ?;`
 
 	result, err := fr.dbWrite.ExecContext(ctx, query,
 		messageId,               // WHERE id = ?
 		queueName,               // AND queue = ?
 		common.ProcessingStatus, // AND status = ?
+		receipt,                 // AND processing_started_at = ?
 	)
 	if err != nil {
 		log.Error().Err(err).Str("queue", queueName).Msg("failed to delete message on ack")

@@ -29,6 +29,8 @@ POST /queues/{queue}/messages
 
 where `{queue}` is the name of the queue to which you want to send messages. If queue does not exist, it will be created automatically.
 
+Queue names must match `^[a-zA-Z0-9._-]{1,64}$` (letters, digits, dots, underscores, hyphens; max 64 characters). Names ending with the reserved `-dlq` suffix are rejected on produce - messages enter dead-letter queues only via the failure/expiry paths, though consuming from a DLQ directly is allowed.
+
 ### Request Body
 
 The request body must be a JSON object with the following fields:
@@ -56,6 +58,8 @@ All requests to the Forq API must include an `X-API-Key` header with a valid API
 ### Response
 
 On success, the server will respond with a `204 No Content` status code, indicating that the message was successfully produced to the queue.
+
+Oversized request bodies are rejected with `413 Request Entity Too Large` before being read fully; content over the 256 KB limit within an accepted body gets a `400 Bad Request` with the code `bad_request.body.content.exceeds_limit`.
 
 Please, note that processing is synchronous, so 204 means that the message has been persisted to the queue DB, and might be available for consumption (if `processAfter` is not set or is in the past).
 

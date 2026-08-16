@@ -50,11 +50,11 @@ You can then use the producer to send messages:
 ```go
 queueName := "my-queue"
 newMessage := api.NewMessageRequest{
-    Context: "I am going on an adventure!",
+    Content: "I am going on an adventure!",
     ProcessAfter: 1757875397418,
 }
 
-err := p.SendMessage(context.Background(), newMessage, queueName)
+err := p.Produce(context.Background(), newMessage, queueName)
 ```
 
 ### Consumer
@@ -83,14 +83,19 @@ Then you'll process the message.
 If processing is successful, you have to acknowledge the message, otherwise it will be re-delivered after the max processing time.
 
 ```go
-err = c.Ack(context.Background(), "my-queue", msg.ID)
+err = c.Ack(context.Background(), "my-queue", msg)
 ```
 
 If processing failed, you have to nack the message:
 
 ```go
-err = c.Nack(context.Background(), "my-queue", msg.ID)
+err = c.Nack(context.Background(), "my-queue", msg)
 ```
+
+`Ack` and `Nack` take the whole message (not just the ID) because the server requires the delivery receipt
+from the consume response: it fences the ack/nack to that exact delivery, so a late ack/nack from a consumer
+that exceeded the max processing time cannot affect a redelivery owned by another consumer. The SDK sends
+the receipt for you.
 
 ## Java SDK
 
@@ -106,7 +111,7 @@ It is available in the [Maven Central Repository](https://central.sonatype.com/a
 </dependency>
 ```
 
-where `${forq-version}` is the latest version, e.g. `0.0.2`
+where `${forq-version}` is the latest version, e.g. `0.1.0`
 
 ### Producer
 
@@ -114,11 +119,13 @@ where `${forq-version}` is the latest version, e.g. `0.0.2`
 var producer = new ForqProducer(httpClient, "http://localhost:8080", "your-auth-secret-min-32-chars-long");
 ```
 
-where `httpClient` is an instance of `okhttp3.OkHttpClient` that you have to initialize with necessary timeouts, etc.
+where `httpClient` is an instance of Apache HttpClient 5 `CloseableHttpClient` that you have to initialize with necessary timeouts, connection pool sizes, etc.
 
-You might ask why not use `java.net.http.HttpClient` that is part of the JDK? The reason is that Forq encourages to use HTTP2 due to long-polling,
-and native Java HTTP Client has a [bug with GOAWAY frames](https://bugs.openjdk.org/browse/JDK-8335181) that was fixed only in Java 24. 
-It is a too hard ask to require Java 24, so I decided to use OkHttp that has a solid HTTP2 support.
+You might ask why not use `java.net.http.HttpClient` that is part of the JDK? The native Java HTTP Client has a [bug with GOAWAY frames](https://bugs.openjdk.org/browse/JDK-8335181) that was fixed only in Java 24, which is a too hard ask.
+
+Please note that the classic (blocking) Apache HttpClient API speaks HTTP/1.1: each in-flight long poll occupies one pooled connection.
+If you run many concurrent consumers from one JVM, raise the connection pool limits accordingly
+(`PoolingHttpClientConnectionManager` `setMaxTotal`/`setDefaultMaxPerRoute` - the per-route default is only 5).
 
 You can then use the producer to send messages:
 
@@ -128,7 +135,7 @@ var newMessage = new NewMessageRequest("I am going on an adventure!", 1757875397
 try {
     producer.sendMessage(newMessage, "my-queue");
 } catch (IOException e) {
-    // thrown by either Jackson while serializing the request, or by OkHttp while sending the request
+    // thrown by either Jackson while serializing the request, or by the HTTP client while sending the request
     // process it here
 } catch (ErrorResponseException e) {
     // thrown if Forq server returned non-2xx response
@@ -142,7 +149,8 @@ try {
 var consumer = new ForqConsumer(httpClient, "http://localhost:8080", "your-auth-secret-min-32-chars-long");
 ```
 
-where `httpClient` is an instance of `okhttp3.OkHttpClient` that you have to initialize with necessary timeouts, etc.
+where `httpClient` is an instance of Apache HttpClient 5 `CloseableHttpClient`. The SDK sets the response timeout
+for the consume call itself (long polling needs at least 40 seconds), so no special timeout tuning is needed.
 
 You can then use the consumer to fetch messages:
 
@@ -150,7 +158,7 @@ You can then use the consumer to fetch messages:
 try {
     var msgOptional = consumer.consumeOne("my-queue");
 } catch (IOException e) {
-    // thrown by either Jackson while deserializing the response, or by OkHttp while sending the request
+    // thrown by either Jackson while deserializing the response, or by the HTTP client while sending the request
     // process it here
 } catch (ErrorResponseException e) {
     // thrown if Forq server returned non-2xx response
@@ -164,9 +172,9 @@ Then you'll process the message.
 If processing is successful, you have to acknowledge the message, otherwise it will be re-delivered after the max processing time.
 ```java
 try {
-    consumer.ack("my-queue", msg.id());
+    consumer.ack("my-queue", msg);
 } catch (IOException e) {
-    // thrown by either Jackson while serializing the request, or by OkHttp while sending the request
+    // thrown by either Jackson while serializing the request, or by the HTTP client while sending the request
     // process it here
 } catch (ErrorResponseException e) {
     // thrown if Forq server returned non-2xx response
@@ -178,9 +186,9 @@ try {
 If processing failed, you have to nack the message:
 ```java
 try {
-    consumer.nack("my-queue", msg.id());
+    consumer.nack("my-queue", msg);
 } catch (IOException e) {
-    // thrown by either Jackson while serializing the request, or by OkHttp while sending the
+    // thrown by either Jackson while serializing the request, or by the HTTP client while sending the request
     // process it here
 } catch (ErrorResponseException e) {
     // thrown if Forq server returned non-2xx response
@@ -188,6 +196,9 @@ try {
     // response body via `e.getErrorResponse()`
 }
 ```
+
+`ack` and `nack` take the whole `MessageResponse` (not just the ID) because the server requires the delivery
+receipt from the consume response - the SDK sends it for you via the `X-Forq-Receipt` header.
 
 ## TypeScript SDK
 
@@ -276,10 +287,10 @@ Then you'll process the message.
 If processing is successful, you have to acknowledge the message, otherwise it will be re-delivered after the max processing time.
 
 ```typescript
-async function acknowledgeMessage(messageId: string): Promise<void> {
+async function acknowledgeMessage(message: MessageResponse): Promise<void> {
     try {
-        await consumer.ack('my-queue', messageId);
-        console.log(`Message ${messageId} acknowledged successfully`);
+        await consumer.ack('my-queue', message);
+        console.log(`Message ${message.id} acknowledged successfully`);
     } catch (error) {
         if (error instanceof ForqError) {
             console.error(`ForqError during ack: Status ${error.httpStatusCode} and error response ${error.errorResponse}`, error);
@@ -294,10 +305,10 @@ async function acknowledgeMessage(messageId: string): Promise<void> {
 If processing failed, you have to nack the message:
 
 ```typescript
-async function nackMessage(messageId: string): Promise<void> {
+async function nackMessage(message: MessageResponse): Promise<void> {
     try {
-        await consumer.nack('my-queue', messageId);
-        console.log(`Message ${messageId} nacked successfully`);
+        await consumer.nack('my-queue', message);
+        console.log(`Message ${message.id} nacked successfully`);
     } catch (error) {
         if (error instanceof ForqError) {
             console.error(`ForqError during nack: Status ${error.httpStatusCode} and error response ${error.errorResponse}`, error);
@@ -308,3 +319,6 @@ async function nackMessage(messageId: string): Promise<void> {
     }
 }
 ```
+
+`ack` and `nack` take the whole `MessageResponse` (not just the ID) because the server requires the delivery
+receipt from the consume response - the SDK sends it for you via the `X-Forq-Receipt` header.

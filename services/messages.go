@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -104,6 +105,7 @@ func (ms *MessagesService) GetMessageForConsuming(queueName string, ctx context.
 			return &common.MessageResponse{
 				Id:      message.Id,
 				Content: message.Content,
+				Receipt: strconv.FormatInt(message.ProcessingStartedAt, 10),
 			}, nil
 		}
 
@@ -122,8 +124,13 @@ func (ms *MessagesService) GetMessageForConsuming(queueName string, ctx context.
 	}
 }
 
-func (ms *MessagesService) AckMessage(messageId string, queueName string, ctx context.Context) error {
-	err := ms.forqRepo.DeleteMessageOnAck(messageId, queueName, ctx)
+func (ms *MessagesService) AckMessage(messageId string, queueName string, receipt string, ctx context.Context) error {
+	parsedReceipt, err := ms.parseReceipt(receipt)
+	if err != nil {
+		return err
+	}
+
+	err = ms.forqRepo.DeleteMessageOnAck(messageId, queueName, parsedReceipt, ctx)
 	if err != nil {
 		return err
 	}
@@ -131,13 +138,32 @@ func (ms *MessagesService) AckMessage(messageId string, queueName string, ctx co
 	return nil
 }
 
-func (ms *MessagesService) NackMessage(messageId string, queueName string, ctx context.Context) error {
-	err := ms.forqRepo.UpdateMessageOnConsumingFailure(messageId, queueName, ctx)
+func (ms *MessagesService) NackMessage(messageId string, queueName string, receipt string, ctx context.Context) error {
+	parsedReceipt, err := ms.parseReceipt(receipt)
+	if err != nil {
+		return err
+	}
+
+	err = ms.forqRepo.UpdateMessageOnConsumingFailure(messageId, queueName, parsedReceipt, ctx)
 	if err != nil {
 		return err
 	}
 	ms.metricsService.IncMessagesNackedTotalBy(1, queueName)
 	return nil
+}
+
+// parseReceipt validates the delivery receipt echoed back by the consumer.
+// A missing receipt gets a distinct error code, as it is the loud signal of an
+// outdated SDK/client rather than a malformed value.
+func (ms *MessagesService) parseReceipt(receipt string) (int64, error) {
+	if receipt == "" {
+		return 0, common.ErrBadRequestReceiptMissing
+	}
+	parsed, err := strconv.ParseInt(receipt, 10, 64)
+	if err != nil {
+		return 0, common.ErrBadRequestReceiptInvalid
+	}
+	return parsed, nil
 }
 
 func (ms *MessagesService) RequeueAllDlqMessages(queueName string, ctx context.Context) error {
