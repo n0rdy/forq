@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"crypto/subtle"
 	"net/http"
 
 	"github.com/n0rdy/forq/common"
@@ -85,7 +86,7 @@ func (ur *Router) processLogin(w http.ResponseWriter, req *http.Request) {
 	}
 
 	token := req.FormValue("token")
-	if token != ur.authSecret {
+	if subtle.ConstantTimeCompare([]byte(token), []byte(ur.authSecret)) != 1 {
 		ur.throttlingService.RecordFailure(utils.ClientIP(req, ur.trustProxyHeaders))
 		log.Error().Msg("Invalid login token")
 		data := common.LoginPageData{

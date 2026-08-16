@@ -1,6 +1,7 @@
 package api
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"net/http"
 
@@ -38,7 +39,7 @@ func apiKeyTokenAuth(authSecret string, throttlingService *services.ThrottlingSe
 			}
 
 			authHeader := req.Header.Get("X-API-Key")
-			if authHeader != authSecret {
+			if subtle.ConstantTimeCompare([]byte(authHeader), []byte(authSecret)) != 1 {
 				throttlingService.RecordFailure(ip)
 				log.Error().Msg("Invalid API key")
 				sendUnauthorizedErrorResponse(w)

@@ -107,9 +107,8 @@ func (ms *MessagesService) GetMessageForConsuming(queueName string, ctx context.
 		case <-ticker.C:
 			// continue polling
 		case <-ctx.Done():
-			// client disconnected, stop polling and return
-			log.Error().Err(ctx.Err()).Msg("context cancelled while fetching message")
-			return nil, common.ErrInternal
+			// client disconnected or request timed out - normal for long polling, not an error
+			return nil, nil
 		}
 	}
 }

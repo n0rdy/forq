@@ -34,6 +34,7 @@ const (
 // the admin UI scanning a huge DLQ) returns SQLITE_NOMEM instead of OOMing
 // the process.
 var readPragmas = []string{
+	"PRAGMA busy_timeout = 5000",
 	"PRAGMA synchronous = NORMAL",
 	"PRAGMA temp_store = MEMORY",
 	"PRAGMA cache_size = -10000",
@@ -45,6 +46,7 @@ var readPragmas = []string{
 // the periodic PRAGMA optimize is run separately by the maintenance job.
 // Larger cache_size since this is the only write connection.
 var writePragmas = []string{
+	"PRAGMA busy_timeout = 5000",
 	"PRAGMA synchronous = NORMAL",
 	"PRAGMA temp_store = MEMORY",
 	"PRAGMA cache_size = -40000",
@@ -634,6 +636,7 @@ func (fr *ForqRepo) DeleteMessageOnAck(messageId string, queueName string, ctx c
 
 	if rowsAffected == 0 {
 		log.Warn().Str("queue", queueName).Str("message_id", messageId).Msg("no rows deleted on ack, message was either deleted already or does not exist")
+		return common.ErrNotFoundMessage
 	}
 	return nil
 }
@@ -720,7 +723,7 @@ func (fr *ForqRepo) Ping(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return fr.dbWrite.Ping()
+	return fr.dbWrite.PingContext(ctx)
 }
 
 func (fr *ForqRepo) Optimize(ctx context.Context) error {
@@ -752,10 +755,12 @@ func (fr *ForqRepo) Close() error {
 func (fr *ForqRepo) processAfterCases(nowMs int64) string {
 	var processAfterCases strings.Builder
 
-	// builds WHEN clauses for each backoff delay
+	// builds WHEN clauses for each backoff delay.
+	// `attempts` was already incremented when the message was claimed for
+	// consuming, so the first failed delivery arrives here with attempts = 1.
 	for i, delay := range fr.appConfigs.BackoffDelaysMs {
 		if i < len(fr.appConfigs.BackoffDelaysMs)-1 {
-			processAfterCases.WriteString(fmt.Sprintf("WHEN attempts + 1 = %d THEN %d ", i+1, nowMs+delay))
+			processAfterCases.WriteString(fmt.Sprintf("WHEN attempts = %d THEN %d ", i+1, nowMs+delay))
 		} else {
 			processAfterCases.WriteString(fmt.Sprintf("ELSE %d ", nowMs+delay))
 		}

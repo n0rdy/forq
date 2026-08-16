@@ -310,6 +310,15 @@ func runMigrations(dbPath string) {
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to create migration instance")
 	}
+	defer func() {
+		srcErr, dbErr := m.Close()
+		if srcErr != nil {
+			log.Warn().Err(srcErr).Msg("failed to close migration source")
+		}
+		if dbErr != nil {
+			log.Warn().Err(dbErr).Msg("failed to close migration database connection")
+		}
+	}()
 
 	err = m.Up()
 	if err != nil {
