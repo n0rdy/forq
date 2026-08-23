@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Rules
+
+- **Never run Git commands on the user's behalf.** Do not commit, push, stage, stash, reset, checkout, or otherwise modify repository state via `git`. Read-only inspection (`git status`, `git diff`, `git log`) is fine. Leave all version-control actions to the user.
+
 ## Development Commands
 
 ### Core Commands
