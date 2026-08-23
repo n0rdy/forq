@@ -81,8 +81,11 @@ jobs:
       - name: Verify committed assets are up to date
         run: |
           if [ -n "$(git status --porcelain ui/static)" ]; then
-            echo "❌ ui/static is stale - run 'npm run build' in ui/ and commit the result"
-            git diff ui/static | head -50
+            echo "❌ ui/static is stale - run 'npm ci && npm run build' in ui/ and commit the result"
+            git diff --stat ui/static
+            # The assets are minified single-line files, so show a word-level diff
+            # of the changed tokens instead of dumping the whole line twice.
+            git diff --word-diff=plain --word-diff-regex='[^{};]+' ui/static | grep -oE '(\[-[^]]*-\]|\{\+[^}]*\+\})' | head -50
             exit 1
           fi
 
