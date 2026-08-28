@@ -26,7 +26,7 @@ theme_default = "system" # available options [light/dark/system]
 # custom script on header, example: custom_script= "<script>console.log(\"Hello World\")</script>"
 custom_script = ""
 # copyright
-copyright = "Made by [Myko Nordy](https://n0rdy.foo)"
+copyright = "Made by [Myko Nordy](https://n0rdy.foo). Also by me: [pooml](https://pooml.com), logs and metrics in one small binary, and [Ten Breaths](https://tenbreaths.app), a breathing guide that floats over your Mac screen."
 
 # Preloader
 # preloader module: https://github.com/gethugothemes/hugo-modules/tree/master/components/preloader
