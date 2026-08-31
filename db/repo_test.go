@@ -7,20 +7,16 @@ import (
 	"fmt"
 	"testing"
 	"time"
+	"uuid"
 
 	"github.com/n0rdy/forq/common"
 	"github.com/n0rdy/forq/db"
 	"github.com/n0rdy/forq/internal/testutil"
-
-	"github.com/google/uuid"
 )
 
 func newMessage(t *testing.T, queue string, content string) *db.NewMessage {
 	t.Helper()
-	id, err := uuid.NewV7()
-	if err != nil {
-		t.Fatal(err)
-	}
+	id := uuid.NewV7()
 	nowMs := time.Now().UnixMilli()
 	return &db.NewMessage{
 		Id:           id.String(),
@@ -311,12 +307,12 @@ func TestExpiredSweep_BatchesAndSkipsProcessing(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i := 0; i < 2500; i++ {
-		id, _ := uuid.NewV7()
+		id := uuid.NewV7()
 		if _, err := stmt.Exec(id.String(), common.ReadyStatus, nowMs, nowMs, nowMs, nowMs-1); err != nil {
 			t.Fatal(err)
 		}
 	}
-	processingID, _ := uuid.NewV7()
+	processingID := uuid.NewV7()
 	if _, err := stmt.Exec(processingID.String(), common.ProcessingStatus, nowMs, nowMs, nowMs, nowMs-1); err != nil {
 		t.Fatal(err)
 	}
@@ -357,7 +353,7 @@ func TestExpiredDlqSweep_Deletes(t *testing.T) {
 
 	nowMs := time.Now().UnixMilli()
 	for i := 0; i < 3; i++ {
-		id, _ := uuid.NewV7()
+		id := uuid.NewV7()
 		_, err := rawDB.Exec(`INSERT INTO messages (id, queue, is_dlq, content, status, process_after, received_at, updated_at, expires_after)
 			VALUES (?, 'orders-dlq', TRUE, 'x', ?, ?, ?, ?, ?)`,
 			id.String(), common.ReadyStatus, nowMs, nowMs, nowMs, nowMs-1)
@@ -380,7 +376,7 @@ func TestRequeueDlqMessages(t *testing.T) {
 	ctx := context.Background()
 
 	nowMs := time.Now().UnixMilli()
-	id, _ := uuid.NewV7()
+	id := uuid.NewV7()
 	_, err := rawDB.Exec(`INSERT INTO messages (id, queue, is_dlq, content, status, attempts, process_after, received_at, updated_at, expires_after, failure_reason)
 		VALUES (?, 'orders-dlq', TRUE, 'x', ?, 5, ?, ?, ?, ?, 'max_attempts_reached')`,
 		id.String(), common.ReadyStatus, nowMs, nowMs, nowMs, nowMs+1000)

@@ -6,13 +6,13 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"uuid"
 
 	"github.com/n0rdy/forq/common"
 	"github.com/n0rdy/forq/configs"
 	"github.com/n0rdy/forq/db"
 	"github.com/n0rdy/forq/metrics"
 
-	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 )
 
@@ -66,12 +66,7 @@ func (ms *MessagesService) ProcessNewMessage(newMessage common.NewMessageRequest
 		processAfter = newMessage.ProcessAfter
 	}
 
-	messageId, err := uuid.NewV7()
-	if err != nil {
-		log.Error().Err(err).Msg("failed to generate new message ID")
-		return common.ErrInternal
-	}
-
+	messageId := uuid.NewV7()
 	messageToInsert := db.NewMessage{
 		Id:           messageId.String(),
 		QueueName:    queueName,
@@ -82,7 +77,7 @@ func (ms *MessagesService) ProcessNewMessage(newMessage common.NewMessageRequest
 		ExpiresAfter: processAfter + ms.appConfigs.QueueTtlMs,
 	}
 
-	err = ms.forqRepo.InsertMessage(&messageToInsert, ctx)
+	err := ms.forqRepo.InsertMessage(&messageToInsert, ctx)
 	if err != nil {
 		return err
 	}

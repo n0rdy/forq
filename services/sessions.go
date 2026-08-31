@@ -3,8 +3,7 @@ package services
 import (
 	"sync"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 const (
