@@ -1,3 +1,3 @@
 module forq.sh/docs
 
-go 1.25
+go 1.27
