@@ -1,11 +1,10 @@
 module github.com/n0rdy/forq
 
-go 1.26
+go 1.27
 
 require (
 	github.com/go-chi/chi/v5 v5.3.2
 	github.com/golang-migrate/migrate/v4 v4.19.1
-	github.com/google/uuid v1.6.0
 	github.com/justinas/nosurf v1.2.0
 	github.com/mattn/go-sqlite3 v1.14.50
 	github.com/prometheus/client_golang v1.24.1
@@ -16,6 +15,7 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
+	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect

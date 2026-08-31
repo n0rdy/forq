@@ -2,8 +2,7 @@ package common
 
 import (
 	"regexp"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // queueNameRegex bounds queue names to a safe charset and length. Anything

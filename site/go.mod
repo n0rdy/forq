@@ -1,6 +1,6 @@
 module forq.sh/site
 
-go 1.25
+go 1.27
 
 require (
 	github.com/gethugothemes/hugo-modules/accordion v0.0.0-20250702070945-cd8319c6b26e // indirect

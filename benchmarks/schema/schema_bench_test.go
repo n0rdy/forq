@@ -19,8 +19,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -108,12 +108,9 @@ func setupDB(b *testing.B, withoutRowid bool) *sql.DB {
 }
 
 func insertMessage(db *sql.DB, queue, content string) (string, error) {
-	id, err := uuid.NewV7()
-	if err != nil {
-		return "", err
-	}
+	id := uuid.NewV7()
 	nowMs := time.Now().UnixMilli()
-	_, err = db.Exec(
+	_, err := db.Exec(
 		`INSERT INTO messages (id, queue, content, process_after, received_at, updated_at, expires_after)
 		 VALUES (?, ?, ?, ?, ?, ?, ?);`,
 		id.String(), queue, content, nowMs, nowMs, nowMs, nowMs+24*60*60*1000,
@@ -162,10 +159,7 @@ func seedBacklog(b *testing.B, db *sql.DB, queue, content string, n int) {
 		b.Fatal(err)
 	}
 	for i := 0; i < n; i++ {
-		id, err := uuid.NewV7()
-		if err != nil {
-			b.Fatal(err)
-		}
+		id := uuid.NewV7()
 		if _, err := stmt.Exec(id.String(), queue, content, nowMs, nowMs+int64(i), nowMs, nowMs+24*60*60*1000); err != nil {
 			b.Fatal(err)
 		}
