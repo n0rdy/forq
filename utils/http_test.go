@@ -76,3 +76,21 @@ func TestClientIP(t *testing.T) {
 		})
 	}
 }
+
+// A proxy that emits its OWN X-Forwarded-For line rather than appending to the
+// client's arrives as two header field lines. Header.Get returns only the
+// first (attacker-controlled) line, so ClientIP must iterate Header.Values and
+// take the rightmost parseable entry across all lines.
+func TestClientIPSeparateProxyLine(t *testing.T) {
+	req, err := http.NewRequest(http.MethodGet, "/", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.RemoteAddr = "10.0.0.1:80"
+	req.Header.Add("X-Forwarded-For", "1.2.3.4")     // spoofed by the client
+	req.Header.Add("X-Forwarded-For", "203.0.113.7") // added by the proxy
+
+	if got := ClientIP(req, true); got != "203.0.113.7" {
+		t.Errorf("ClientIP() = %q, want %q (proxy-added rightmost value)", got, "203.0.113.7")
+	}
+}

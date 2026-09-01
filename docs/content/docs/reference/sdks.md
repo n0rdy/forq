@@ -93,8 +93,8 @@ err = c.Nack(context.Background(), "my-queue", msg)
 ```
 
 `Ack` and `Nack` take the whole message (not just the ID) because the server requires the delivery receipt
-from the consume response: it fences the ack/nack to that exact delivery, so a late ack/nack from a consumer
-that exceeded the max processing time cannot affect a redelivery owned by another consumer. The SDK sends
+from the consume response: it fences the ack/nack to that exact delivery, so a stale late ack/nack from a consumer
+that overran the max processing time won't disturb a redelivery that has since been handed to another consumer. The SDK sends
 the receipt for you.
 
 ## Java SDK

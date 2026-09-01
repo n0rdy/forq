@@ -49,6 +49,24 @@ func securityHeaders(env string) func(http.Handler) http.Handler {
 	}
 }
 
+// maxUIBodyBytes caps UI request bodies. The only UI endpoint that reads a
+// body is /login (a small form); without this it falls back to net/http's
+// 10 MB form default, an unauthenticated 10 MB parse per request.
+const maxUIBodyBytes = 64 << 10
+
+// bodyLimit wraps the request body so a read past the cap fails instead of
+// buffering unboundedly. Applied before processLogin's ParseForm.
+func bodyLimit(max int64) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			if req.Body != nil {
+				req.Body = http.MaxBytesReader(w, req.Body, max)
+			}
+			next.ServeHTTP(w, req)
+		})
+	}
+}
+
 // validateQueueName rejects queue-name URL segments outside the allowed
 // charset before they reach templates or destructive handlers.
 func validateQueueName(next http.Handler) http.Handler {

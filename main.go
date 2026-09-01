@@ -39,7 +39,7 @@ const (
 func main() {
 	env := getEnv()
 	authSecret := getAuthSecret()
-	metricsEnabled, metricsAuthSecret := getMetricsConfigs()
+	metricsEnabled, metricsAuthSecret := getMetricsConfigs(authSecret)
 	queueTtlHours, dlqTtlHours := getTtlConfigs()
 	apiAddr, uiAddr := getServerAddrs()
 	trustProxyHeaders := getTrustProxyHeaders()
@@ -63,8 +63,16 @@ func main() {
 	messagesService := services.NewMessagesService(metricsService, repo, appConfigs)
 	sessionsService := services.NewSessionsService()
 	defer sessionsService.Close()
-	throttlingService := services.NewThrottlingService()
-	defer throttlingService.Close()
+	// Separate throttle state per server: the API and UI are split into
+	// distinct servers so exposing the API can't affect the UI. A shared
+	// instance would re-couple them - behind a proxy every request collapses
+	// to one client IP, so bad-key floods on the public API would surface as
+	// lockouts on the UI login path (harmless today thanks to compare-first
+	// auth, but coupling them invites a regression).
+	apiThrottlingService := services.NewThrottlingService()
+	defer apiThrottlingService.Close()
+	uiThrottlingService := services.NewThrottlingService()
+	defer uiThrottlingService.Close()
 
 	expiredMessagesCleanupJob := cleanup.NewExpiredMessagesCleanupJob(metricsService, repo, appConfigs.JobsIntervals.ExpiredMessagesCleanupMs)
 	defer expiredMessagesCleanupJob.Close()
@@ -93,7 +101,7 @@ func main() {
 	serverFailedCh := make(chan struct{})
 	var serverFailedOnce sync.Once
 
-	apiRouter := api.NewRouter(monitoringService, messagesService, throttlingService, authSecret, metricsEnabled, metricsAuthSecret, env, trustProxyHeaders)
+	apiRouter := api.NewRouter(monitoringService, messagesService, apiThrottlingService, authSecret, metricsEnabled, metricsAuthSecret, env, trustProxyHeaders)
 
 	var apiProtocols http.Protocols
 	apiProtocols.SetUnencryptedHTTP2(true)
@@ -110,7 +118,7 @@ func main() {
 		BaseContext:       func(net.Listener) context.Context { return shutdownCtx },
 	}
 
-	uiRouter := ui.NewRouter(messagesService, sessionsService, queuesService, throttlingService, authSecret, env, trustProxyHeaders)
+	uiRouter := ui.NewRouter(messagesService, sessionsService, queuesService, uiThrottlingService, authSecret, env, trustProxyHeaders)
 
 	var uiProtocols http.Protocols
 	uiProtocols.SetUnencryptedHTTP2(true)
@@ -224,7 +232,7 @@ func getTrustProxyHeaders() bool {
 	return trust
 }
 
-func getMetricsConfigs() (bool, string) {
+func getMetricsConfigs(authSecret string) (bool, string) {
 	metricsEnabledEnv := os.Getenv("FORQ_METRICS_ENABLED")
 	if metricsEnabledEnv == "" {
 		return false, "" // Metrics disabled by default
@@ -245,6 +253,12 @@ func getMetricsConfigs() (bool, string) {
 	}
 	if len(metricsAuthSecret) < minAuthSecretLength {
 		log.Fatal().Msgf("metrics auth secret is too short: must be at least %d characters", minAuthSecretLength)
+	}
+	// The metrics secret is a low-privilege scrape credential; keeping it
+	// distinct from the full-access API token limits the blast radius of a
+	// leaked Prometheus config.
+	if metricsAuthSecret == authSecret {
+		log.Fatal().Msg("FORQ_METRICS_AUTH_SECRET must differ from FORQ_AUTH_SECRET")
 	}
 	return true, metricsAuthSecret
 }

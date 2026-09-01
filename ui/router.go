@@ -38,6 +38,7 @@ func (ur *Router) NewRouter() *chi.Mux {
 	router := chi.NewRouter()
 
 	router.Use(securityHeaders(ur.env))
+	router.Use(bodyLimit(maxUIBodyBytes))
 	router.Use(csrfPrevention(ur.csrfErrorHandler, ur.env))
 
 	// embedded static assets (CSS, HTMX, theme script) - unauthenticated, as

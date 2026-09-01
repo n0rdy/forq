@@ -676,7 +676,9 @@ Same for `status = ?`, which ensures that the message is in the `processing` sta
 This doesn't drain performance, as the primary key lookup is already fast enough, and SQLite knows that there can be at most 1 row matching the `id`, so it doesn't need to scan the entire table.
 
 The `processing_started_at = ?` part is the delivery fencing: every claim stamps a fresh `processing_started_at`, and that value is what the consumer got as its `receipt`. 
-A consumer that exceeded the max processing time holds a stale receipt, so its late ack matches 0 rows and cannot delete a redelivery that another consumer is actively processing.
+A consumer that exceeded the max processing time holds a stale receipt, so its late ack matches 0 rows and does not delete a redelivery that another consumer is actively processing.
+
+To be precise about what this is: it's a *correctness lease* against timing races, not a security boundary. The receipt is the claim timestamp, not an unguessable secret, so it defends against the accidental case - a slow consumer's stale ack landing after redelivery - but not against a deliberate holder of the shared API key who guesses the millisecond a delivery was claimed. In Forq's single-token model every consumer is already fully trusted with every queue, so that's not a boundary Forq tries to draw; if you ever need mutually-distrusting consumers, the receipt is not the mechanism to lean on.
 
 It is critically important to acknowledge the message after its being processed successfully, as otherwise, the message might be reprocessed by another consumer.
 Duplicates are bad, mkay?
