@@ -116,7 +116,7 @@ Otherwise, for the standard queues, it will be moved to DLQ, and for DLQs, it wi
 
 This is a potential source of duplicate message processing, so make sure to call ack/nack within the max processing time, and implement idempotency in your message processing logic (if possible).
 
-Note that an ack/nack sent *after* the max processing time carries a stale delivery receipt, so it cannot corrupt a redelivery that another consumer is already processing - it will simply get a `404 Not Found`. Treat that 404 as "my delivery is gone, the work may be redone by someone else".
+Note that an ack/nack sent *after* the max processing time carries a stale delivery receipt, so it won't disturb a redelivery that another consumer is already processing - it will simply get a `404 Not Found`. Treat that 404 as "my delivery is gone, the work may be redone by someone else".
 
 ### Consuming From DLQ
 
