@@ -46,6 +46,15 @@ func TestClientIP(t *testing.T) {
 			want:       "10.0.0.1",
 		},
 		{
+			// a malformed rightmost (proxy-added) entry must fall back to
+			// RemoteAddr, never to the earlier client-supplied (spoofable) entry
+			name:       "malformed rightmost falls back, not to earlier entry",
+			remoteAddr: "10.0.0.1:80",
+			xff:        "203.0.113.9, not-an-ip",
+			trustProxy: true,
+			want:       "10.0.0.1",
+		},
+		{
 			name:       "empty XFF falls back to RemoteAddr",
 			remoteAddr: "10.0.0.1:80",
 			xff:        "",
