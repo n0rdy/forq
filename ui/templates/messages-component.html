@@ -18,11 +18,8 @@
         {{range .Data.Messages}}
         <!-- Message metadata row (clickable) -->
         <tr id="message-row-{{.ID}}" class="hover:bg-base-200 cursor-pointer"
-            hx-get="/queue/{{$.Data.QueueName}}/messages/{{.ID}}/details"
-            hx-target="#message-details-{{.ID}}"
-            hx-trigger="click"
-            hx-swap="innerHTML"
-            onclick="document.getElementById('message-details-{{.ID}}').classList.toggle('hidden')">
+            data-details-url="/queue/{{$.Data.QueueName}}/messages/{{.ID}}/details"
+            data-details-target="message-details-{{.ID}}">
             <td>
                 <div class="font-mono text-sm text-primary">{{.ID}}</div>
                 {{if .ProcessAfter}}
@@ -45,7 +42,7 @@
                 <span class="text-sm">{{.Age}}</span>
             </td>
             {{if $.Data.IsDLQ}}
-            <td onclick="event.stopPropagation()">
+            <td data-row-actions>
                 <div class="flex gap-1">
                     <button class="btn btn-warning btn-xs"
                             hx-post="/queue/{{$.Data.QueueName}}/messages/requeue/{{.ID}}"
