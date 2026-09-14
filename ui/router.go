@@ -288,14 +288,12 @@ func (ur *Router) csrfErrorHandler(w http.ResponseWriter, r *http.Request) {
 		Str("method", r.Method).
 		Msg("CSRF validation failed")
 
-	// For HTMX requests, return appropriate error
+	// Both paths land on /login, which issues a fresh token. HTMX callers
+	// need HX-Redirect: fetch follows a real 3xx transparently.
 	if r.Header.Get("HX-Request") == "true" {
-		w.Header().Set("HX-Retarget", "body")
-		w.Header().Set("HX-Reswap", "innerHTML")
-		http.Error(w, "Security validation failed. Please refresh the page and try again.", http.StatusForbidden)
+		w.Header().Set("HX-Redirect", "/login")
+		w.WriteHeader(http.StatusForbidden)
 		return
 	}
-
-	// For regular requests, redirect to login page
 	http.Redirect(w, r, "/login", http.StatusFound)
 }

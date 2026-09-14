@@ -145,7 +145,7 @@ func TestSecurityAndCacheHeaders(t *testing.T) {
 	}
 
 	// static assets are served from the binary and cacheable
-	for _, asset := range []string{"/static/styles.css", "/static/htmx.min.js", "/static/theme.js"} {
+	for _, asset := range []string{"/static/styles.css", "/static/htmx.min.js", "/static/theme.js", "/static/ui.js"} {
 		resp, err := http.Get(srv.URL + asset)
 		if err != nil {
 			t.Fatal(err)
@@ -203,6 +203,24 @@ func TestLoginRequiresCSRFToken(t *testing.T) {
 	// must NOT succeed
 	if resp.StatusCode == http.StatusOK && resp.Header.Get("HX-Redirect") != "" {
 		t.Fatal("login succeeded without a CSRF token")
+	}
+
+	// HTMX callers get the same trip via HX-Redirect on a 403 (htmx 4 would
+	// otherwise swap the failure body into the page)
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/login", strings.NewReader(form.Encode()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set("Origin", srv.URL)
+	hresp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hresp.Body.Close()
+	if hresp.StatusCode != http.StatusForbidden || hresp.Header.Get("HX-Redirect") != "/login" {
+		t.Fatalf("htmx without CSRF token = %d HX-Redirect=%q, want 403 + /login", hresp.StatusCode, hresp.Header.Get("HX-Redirect"))
 	}
 }
 
