@@ -1,0 +1,107 @@
+name: Dependabot - Regenerate UI Assets
+
+# Bumps in ui/package.json change the compiled assets in ui/static, which
+# dependabot can't produce. The bumped code runs with a read-only token; only
+# the commit job, which executes nothing from the dependencies, can push.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'ui/package.json'
+      - 'ui/package-lock.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependabot-regen-${{ github.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  regen:
+    name: Regenerate
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.diff.outputs.changed }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Rebuild UI assets
+        run: cd ui && npm ci && npm run build
+
+      - name: Collect diff
+        id: diff
+        run: |
+          git diff --binary -- ui/static > "$RUNNER_TEMP/regen.patch"
+          if [ -s "$RUNNER_TEMP/regen.patch" ]; then
+            git diff --stat -- ui/static
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "UI assets are already fresh"
+          fi
+
+      - name: Upload patch
+        if: steps.diff.outputs.changed == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: regen-patch
+          path: ${{ runner.temp }}/regen.patch
+          retention-days: 1
+
+  commit:
+    name: Commit regenerated assets
+    needs: regen
+    if: needs.regen.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      # pushes made with GITHUB_TOKEN don't trigger workflows, so the quality
+      # gates on the new commit have to be dispatched explicitly
+      actions: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Download patch
+        uses: actions/download-artifact@v8
+        with:
+          name: regen-patch
+          path: ${{ runner.temp }}
+
+      - name: Commit and push
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          git apply --index "$RUNNER_TEMP/regen.patch"
+          # the patch was produced next to dependency code, so only build outputs may go through
+          if git diff --cached --name-only | grep -vE '^ui/static/(styles\.css|htmx\.min\.js)$'; then
+            echo "::error::regen patch touches files outside the generated set"
+            exit 1
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898283+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Regenerate UI assets after dependency bump'
+          # pushing the detached head sha fails if dependabot moved the branch meanwhile
+          git push origin "HEAD:refs/heads/$HEAD_REF"
+
+      - name: Run quality gates on the new commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: gh workflow run quality-gates.yml --ref "$HEAD_REF"
