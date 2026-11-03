@@ -334,9 +334,8 @@ components:
             - not_found.message
             - internal
           example: bad_request.body.content.exceeds_limit
-      example: {
-        "code": "bad_request.body.content.exceeds_limit"
-      }
+      example:
+        code: "bad_request.body.content.exceeds_limit"
 
     MessageResponse:
       type: object
@@ -363,11 +362,10 @@ components:
             An opaque receipt identifying this particular delivery of the message.
             Must be echoed back on ack/nack via the `X-Forq-Receipt` header. Do not parse it.
           example: "1755366229123"
-      example: {
-        "id": "0199164b-4dea-78d9-9b4c-c699d5037962",
-        "content": "I am going on an adventure!",
-        "receipt": "1755366229123"
-      }
+      example:
+        id: "0199164b-4dea-78d9-9b4c-c699d5037962"
+        content: "I am going on an adventure!"
+        receipt: "1755366229123"
 
     NewMessageRequest:
       type: object
@@ -390,7 +388,6 @@ components:
             
             Must not be in the past, or more than 366 days in the future.
           example: 1700000000000
-      example: {
-        "content": "I am going on an adventure!",
-        "processAfter": 1700000000000
-      }
+      example:
+        content: "I am going on an adventure!"
+        processAfter: 1700000000000
