@@ -36,6 +36,9 @@ updates:
     open-pull-requests-limit: 0
 
   # Weekly updates for all packages
+  # cooldown: skip versions younger than N days. Registry-wide malware scanners usually flag a
+  # poisoned release within hours (LiteLLM 1.107.0: ~7 minutes), so a week's wait keeps it out
+  # of our lockfiles. Security updates (the daily entries above) are exempt and arrive immediately.
   - package-ecosystem: "gomod"
     directory: "/"
     schedule:
@@ -45,6 +48,9 @@ updates:
       timezone: "Europe/Oslo"
     assignees:
       - "n0rdy"
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
     groups:
       gomod:
         patterns:
@@ -58,6 +64,8 @@ updates:
       timezone: "Europe/Oslo"
     assignees:
       - "n0rdy"
+    cooldown:
+      default-days: 7
     groups:
       github-actions:
         patterns:
@@ -73,6 +81,9 @@ updates:
       timezone: "Europe/Oslo"
     assignees:
       - "n0rdy"
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
     groups:
       ui-assets:
         patterns:
