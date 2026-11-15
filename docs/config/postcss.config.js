@@ -1,6 +1,6 @@
 const autoprefixer = require('autoprefixer');
-const { purgeCSSPlugin } = require('@fullhuman/postcss-purgecss');
-const whitelister = require('purgecss-whitelister');
+// v8 of the plugin exports the factory itself (no named `purgeCSSPlugin` export).
+const purgeCSSPlugin = require('@fullhuman/postcss-purgecss');
 
 module.exports = {
     plugins: [
@@ -11,7 +11,7 @@ module.exports = {
                 {
                     extractor: (content) => {
                         const els = JSON.parse(content).htmlElements;
-                        return els.tags.concat(els.classes, els.ids);
+                        return [...(els.tags || []), ...(els.classes || []), ...(els.ids || [])];
                     },
                     extensions: ['json']
                 }
@@ -34,7 +34,9 @@ module.exports = {
             safelist: [
                 'active',
                 'btn-clipboard', // clipboards.js
+                'btn-copy', // clipboards.js
                 'clipboard', // clipboards.js
+                'copy', // clipboards.js
                 'disabled',
                 'hidden',
                 'modal-backdrop', // search-modal.js
@@ -56,8 +58,7 @@ module.exports = {
                 'hiding',
                 'page-item',
                 'page-link',
-                'not-content',
-                ...whitelister(['./assets/scss/**/*.scss', './node_modules/@thulite/doks-core/assets/scss/components/_code.scss', './node_modules/@thulite/doks-core/assets/scss/components/_expressive-code.scss', './node_modules/@thulite/doks-core/assets/scss/common/_syntax.scss'])
+                'not-content'
             ]
         })
     ]

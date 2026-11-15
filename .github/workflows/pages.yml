@@ -15,7 +15,11 @@ concurrency:
 
 env:
   BASE_URL: https://forq.sh
-  HUGO_VERSION: "0.164.0"
+  # Must satisfy site/themes/hugoplate/theme.toml min_version (0.165.0).
+  HUGO_VERSION: "0.169.0"
+  # Thulite 3 (docs) transpiles SCSS with Dart Sass, which Hugo needs as an external binary.
+  DART_SASS_VERSION: "1.107.1"
+  DART_SASS_SHA256: "6cefe78692d03ca53843394bb98de4dccf9a3d8ee5ece40be7316be852624003"
 
 jobs:
   build:
@@ -29,6 +33,18 @@ jobs:
         with:
           hugo-version: ${{ env.HUGO_VERSION }}
           extended: true
+
+      - name: Install Dart Sass
+        run: |
+          tarball="dart-sass-${DART_SASS_VERSION}-linux-x64.tar.gz"
+          curl -fsSL -o "${RUNNER_TEMP}/${tarball}" \
+            "https://github.com/sass/dart-sass/releases/download/${DART_SASS_VERSION}/${tarball}"
+          echo "${DART_SASS_SHA256}  ${RUNNER_TEMP}/${tarball}" | sha256sum -c -
+          tar -xzf "${RUNNER_TEMP}/${tarball}" -C "${RUNNER_TEMP}"
+          echo "${RUNNER_TEMP}/dart-sass" >> "${GITHUB_PATH}"
+
+      - name: Verify Dart Sass
+        run: sass --embedded --version
 
       - uses: actions/setup-node@v7
         with:

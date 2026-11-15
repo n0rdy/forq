@@ -1,7 +1,7 @@
 {
   "name": "forq-docs",
   "description": "Forq documentation site",
-  "version": "1.0.0", 
+  "version": "1.0.0",
   "private": true,
   "scripts": {
     "dev": "hugo server --disableFastRender --noHTTPCache",
@@ -11,11 +11,11 @@
     "clean": "hugo mod clean && rm -rf public/ resources/"
   },
   "dependencies": {
-    "@thulite/doks-core": "^1.8.3",
-    "@thulite/images": "^3.3.1",
-    "@thulite/inline-svg": "^1.2.0", 
-    "@thulite/seo": "^2.4.1",
     "@tabler/icons": "^3.34.1",
+    "@thulite/doks-core": "^1.9.4",
+    "@thulite/images": "^3.3.1",
+    "@thulite/inline-svg": "^1.2.0",
+    "@thulite/seo": "^2.4.1",
     "thulite": "^3.0.3"
   },
   "devDependencies": {
