@@ -1,0 +1,93 @@
+name: Build Sites (Hugo landing + Doks docs)
+
+# Single source of truth for building site/ and docs/. Called by:
+#   - pages.yml (push to main): builds and uploads the Pages artifact for deploy
+#   - quality-gates.yml (PRs): builds only, so a broken site fails the PR instead of the deploy
+on:
+  workflow_call:
+    inputs:
+      upload-pages-artifact:
+        description: Upload _site as the GitHub Pages artifact
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  BASE_URL: https://forq.sh
+  # Must satisfy site/themes/hugoplate/theme.toml min_version (0.165.0).
+  # Hugo fails the build on deprecations 15+ minor versions old, so check warnings before bumping.
+  HUGO_VERSION: "0.169.0"
+  # Thulite 3 (docs) transpiles SCSS with Dart Sass, which Hugo needs as an external binary.
+  DART_SASS_VERSION: "1.107.1"
+  DART_SASS_SHA256: "6cefe78692d03ca53843394bb98de4dccf9a3d8ee5ece40be7316be852624003"
+
+jobs:
+  build:
+    name: Build landing + docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: 'recursive'
+
+      - uses: peaceiris/actions-hugo@v3
+        with:
+          hugo-version: ${{ env.HUGO_VERSION }}
+          extended: true
+
+      - name: Install Dart Sass
+        run: |
+          tarball="dart-sass-${DART_SASS_VERSION}-linux-x64.tar.gz"
+          curl -fsSL -o "${RUNNER_TEMP}/${tarball}" \
+            "https://github.com/sass/dart-sass/releases/download/${DART_SASS_VERSION}/${tarball}"
+          echo "${DART_SASS_SHA256}  ${RUNNER_TEMP}/${tarball}" | sha256sum -c -
+          tar -xzf "${RUNNER_TEMP}/${tarball}" -C "${RUNNER_TEMP}"
+          echo "${RUNNER_TEMP}/dart-sass" >> "${GITHUB_PATH}"
+
+      - name: Verify Dart Sass
+        run: sass --embedded --version
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "lts/*"
+
+      # Build landing to _site/
+      - name: Install deps (landing)
+        working-directory: site
+        run: |
+          if [ -f package.json ]; then npm ci; fi
+      - name: Build landing
+        working-directory: site
+        run: |
+          hugo --minify \
+               --baseURL "${{ env.BASE_URL }}" \
+               --destination "${{ github.workspace }}/_site"
+
+      # Build docs to _site/documentation-portal/
+      - name: Install deps (docs)
+        working-directory: docs
+        run: |
+          if [ -f package.json ]; then npm ci; fi
+
+      # Generate API documentation from OpenAPI spec
+      - name: Generate API docs
+        run: |
+          npm install -g @redocly/cli
+          mkdir -p docs/static/api
+          npx @redocly/cli build-docs openapi.yaml --output docs/static/api/index.html
+          cp openapi.yaml docs/static/api/
+
+      - name: Build docs
+        working-directory: docs
+        run: |
+          hugo --minify --gc \
+               --baseURL "${{ env.BASE_URL }}/documentation-portal/" \
+               --destination "${{ github.workspace }}/_site/documentation-portal"
+
+      - name: Upload Pages artifact
+        if: ${{ inputs.upload-pages-artifact }}
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site

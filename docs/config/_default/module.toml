@@ -28,7 +28,8 @@
 
 [[mounts]]
   # Exclude 'home.html' to avoid conflicts with custom home page layouts defined in the local 'layouts' directory.
-  excludeFiles = "home.html"
+  # 'files' replaces 'excludeFiles' (removed in Hugo 0.169); a leading '! ' excludes the match.
+  files = ["! home.html"]
   source = "node_modules/@thulite/doks-core/layouts"
   target = "layouts"
 
