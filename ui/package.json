@@ -6,9 +6,9 @@
     "build": "tailwindcss -i ./assets/input.css -o ./static/styles.css --minify && cp node_modules/htmx.org/dist/htmx.min.js static/htmx.min.js"
   },
   "devDependencies": {
-    "@tailwindcss/cli": "^4.1.14",
+    "@tailwindcss/cli": "^4.3.5",
     "daisyui": "^5.7.50",
-    "htmx.org": "^4.0.0",
+    "htmx.org": "^4.0.1",
     "tailwindcss": "^4.1.14"
   }
 }
