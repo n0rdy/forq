@@ -91,17 +91,24 @@ jobs:
             exit 1
           fi
 
+  # Builds the landing site and docs exactly as pages.yml does on deploy (same
+  # reusable workflow, same Hugo/Dart Sass versions), so a dependency bump that
+  # breaks either site fails the PR instead of the deploy after merge.
+  sites-build:
+    name: Sites Build
+    uses: ./.github/workflows/sites-build.yml
+
   # Prevent merging if quality checks fail
   quality-gate:
     name: Quality Gate
     runs-on: ubuntu-latest
-    needs: [quality-checks, ui-assets-check]
+    needs: [quality-checks, ui-assets-check, sites-build]
     if: always()
 
     steps:
       - name: Check quality gate status
         run: |
-          if [ "${{ needs.quality-checks.result }}" != "success" ] || [ "${{ needs.ui-assets-check.result }}" != "success" ]; then
+          if [ "${{ needs.quality-checks.result }}" != "success" ] || [ "${{ needs.ui-assets-check.result }}" != "success" ] || [ "${{ needs.sites-build.result }}" != "success" ]; then
             echo "❌ Quality checks failed - blocking merge"
             exit 1
           else
