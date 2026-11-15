@@ -29,6 +29,12 @@ enable = true
 source = 'assets/notwatching/hugo_stats\.json'
 target = 'css'
 
+############################# Security ###########################
+# Hugo >= 0.165 dropped tailwindcss from the default exec allowlist; the hugoplate
+# theme runs it via css.TailwindCSS. This is Hugo's default list plus tailwindcss.
+[security.exec]
+allow = ['^(dart-)?sass$', '^go$', '^git$', '^node$', '^postcss$', '^tailwindcss$']
+
 ############################# Modules ############################
 [module]
 [[module.mounts]]
